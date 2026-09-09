@@ -37,6 +37,14 @@ class GatewayService : Service() {
     companion object {
         const val ACTION_START = "com.rover.gateway.START"
         const val ACTION_STOP = "com.rover.gateway.STOP"
+        const val ACTION_BLE_CMD = "com.rover.gateway.BLE_CMD"
+
+        const val EXTRA_CMD = "cmd"
+        const val EXTRA_SPEED = "speed"
+        const val EXTRA_STEER = "steer"
+        const val EXTRA_ON = "on"
+        const val EXTRA_CHANNEL = "channel"
+        const val EXTRA_POS = "pos"
 
         const val KEY_ROVER_ID = "rover_id"
         const val KEY_BROKER = "broker"
@@ -46,6 +54,11 @@ class GatewayService : Service() {
 
         private const val CHANNEL_ID = "rover_bridge"
         private const val NOTIF_ID = 42
+
+        /** Запущен ли мост (нужно для прямой панели управления). */
+        @Volatile var running = false
+        @Volatile var bleConnected = false
+        @Volatile var lastTelemetry: Protocol.Telemetry? = null
 
         /** Лог для отладочной консоли в MainActivity. Список (timestamp, message). */
         val logBuffer = mutableListOf<Pair<Long, String>>()
@@ -75,6 +88,7 @@ class GatewayService : Service() {
     private fun bridgeTelemetry(owner: GatewayService): (ByteArray) -> Unit = { data ->
         val t = Protocol.decodeTelemetry(data)
         if (t != null) {
+            lastTelemetry = t
             val m = JSONObject()
             m.put("ts", System.currentTimeMillis())
             m.put("ble_connected", t.connected)
@@ -97,9 +111,19 @@ class GatewayService : Service() {
         when (intent?.action) {
             ACTION_START -> start()
             ACTION_STOP -> {
+                running = false
                 stopAll()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
+            }
+            ACTION_BLE_CMD -> {
+                // Прямое управление с телефона по BLE (вкладка «Управление»).
+                if (!running) {
+                    appendLog("SYS", "Шлюз не запущен — нажми «Запустить»")
+                    stopSelf(startId)
+                } else {
+                    handleLocalCommand(intent)
+                }
             }
         }
         return START_STICKY
@@ -107,6 +131,7 @@ class GatewayService : Service() {
 
     private fun start() {
         prefs = getSharedPreferences("cfg", MODE_PRIVATE)
+        running = true
         startForeground(NOTIF_ID, buildNotification("Запуск..."))
         appendLog("SYS", "=== Gateway start ===")
 
@@ -123,6 +148,7 @@ class GatewayService : Service() {
             b.onTelemetry = bridgeTelemetry(this)
             b.onError = { reportError(it) }
             b.onConnectedChange = { c ->
+                bleConnected = c
                 mqtt?.publish("$topicPrefix/status", JSONObject().apply {
                     put("ble_connected", c)
                     put("ts", System.currentTimeMillis())
@@ -212,6 +238,53 @@ class GatewayService : Service() {
         b.writeCommand(packet)
     }
 
+    /** Локальная команда с панели управления телефона → сразу в BLE. */
+    private fun handleLocalCommand(intent: Intent) {
+        val b = ble ?: return
+        if (!b.connected) {
+            statusG("Телефон: BLE не подключён — команда не отправлена")
+            return
+        }
+        val cmd = intent.getStringExtra(EXTRA_CMD) ?: return
+        seq = (seq + 1) and 0xFF
+
+        val packet: ByteArray?
+        var cmdType = cmd
+        when (cmd) {
+            "drive" -> {
+                val speed = intent.getIntExtra(EXTRA_SPEED, 0).coerceIn(-100, 100)
+                val steer = intent.getIntExtra(EXTRA_STEER, 0).coerceIn(-100, 100)
+                packet = Protocol.driveSeq(Protocol.CMD_DRIVE, seq, speed, steer)
+                cmdType = "drive(s=$speed,st=$steer)"
+            }
+            "stop" -> packet = Protocol.stopSeq(Protocol.CMD_STOP, seq)
+            "light" -> {
+                val on = intent.getBooleanExtra(EXTRA_ON, false)
+                packet = Protocol.singleSeq(Protocol.CMD_LIGHT, seq, if (on) 1 else 0)
+                cmdType = if (on) "light:ON" else "light:OFF"
+            }
+            "mine" -> {
+                val ch = intent.getIntExtra(EXTRA_CHANNEL, 0)
+                packet = Protocol.singleSeq(Protocol.CMD_MINE, seq, ch)
+                cmdType = "mine:#$ch"
+            }
+            "leg" -> {
+                val ch = intent.getIntExtra(EXTRA_CHANNEL, 0)
+                val pos = intent.getIntExtra(EXTRA_POS, 0).coerceIn(-100, 100)
+                packet = Protocol.buildCard(Protocol.CMD_LEG, seq, byteArrayOf(ch.toByte(), pos.toByte()))
+                cmdType = "leg:$ch pos=$pos"
+            }
+            "ping" -> packet = Protocol.stopSeq(Protocol.CMD_PING, seq)
+            "reset" -> packet = Protocol.stopSeq(Protocol.CMD_RESET, seq)
+            else -> return
+        }
+        if (packet != null) {
+            statusG("Телефон → BLE: $cmdType seq=$seq")
+            appendLog("LOCAL_TX", "${packet.joinToString("") { "%02X".format(it) }} (${packet.size} bytes)  cmd=$cmdType")
+            b.writeCommand(packet)
+        }
+    }
+
     private fun storeStatus(text: String) {
         prefs.edit().putString("last_status", text).apply()
     }
@@ -224,6 +297,7 @@ class GatewayService : Service() {
     }
 
     override fun onDestroy() {
+        running = false
         stopAll()
         super.onDestroy()
     }

@@ -193,8 +193,6 @@ void Rover::triggerMine(uint8_t channel) {
   Serial.printf("[mine] trigger #%u\n", channel);
   digitalWrite(MINE_PINS[channel], HIGH);
   // TODO: подставь свой взрыватель/серво — тут 50мс импульс, потом OFF
-  pinMode(MINE_PINS[channel], OUTPUT);
-  digitalWrite(MINE_PINS[channel], HIGH);
   delay(50);
   digitalWrite(MINE_PINS[channel], LOW);
 }
@@ -232,8 +230,20 @@ void Rover::buildTelemetry(uint8_t* buf, size_t& len) {
   if (lastState_ == ACK_STOPPED) flags |= 0x04;
   buf[1] = flags;
 
-  // battery: мы не меряем — резерв (0 = неизвестно)
+  // battery (десятые вольта, 0 = неизвестно)
+#if HAS_BATTERY
+  {
+    uint32_t acc = 0;
+    for (int i = 0; i < BATTERY_SAMPLES; i++) {
+      acc += analogRead(PIN_BATTERY);
+      delayMicroseconds(200);
+    }
+    float volts = (acc / (float)BATTERY_SAMPLES) / 4095.0f * 3.3f * BATTERY_DIVIDER;
+    buf[2] = (uint8_t)constrain((int)(volts * 10 + 0.5f), 0, 255);
+  }
+#else
   buf[2] = 0;
+#endif
 
   buf[3] = (uint8_t)(fabs(left_.power()) * 100);
   buf[4] = (uint8_t)(fabs(right_.power()) * 100);

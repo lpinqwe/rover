@@ -71,9 +71,17 @@ class Rover {
   uint8_t lastAckedSeq_ = 0xFF;  // 0xFF = "нет команд"
   uint8_t lastState_ = ACK_OK;
 
-  // Моторы (2 шт, дифф. руление)
+  // Моторы (2 шт, дифф. руление) — реализация зависит от драйвера
+#if MOTOR_DRIVER_TYPE == 2
+  MotorPwmDir left_  = MotorPwmDir("L", PIN_MOTOR_L_PWM, PIN_MOTOR_L_DIR, MD12A_INVERT_L);
+  MotorPwmDir right_ = MotorPwmDir("R", PIN_MOTOR_R_PWM, PIN_MOTOR_R_DIR, MD12A_INVERT_R);
+#elif MOTOR_DRIVER_TYPE == 1
+  MotorL298N left_  = MotorL298N("L", PIN_MOTOR_L_IN1, PIN_MOTOR_L_IN2, PIN_MOTOR_L_PWM);
+  MotorL298N right_ = MotorL298N("R", PIN_MOTOR_R_IN1, PIN_MOTOR_R_IN2, PIN_MOTOR_R_PWM);
+#else
   MotorStub left_  = MotorStub("L", PIN_MOTOR_L_IN1, PIN_MOTOR_L_IN2, PIN_MOTOR_L_PWM);
   MotorStub right_ = MotorStub("R", PIN_MOTOR_R_IN1, PIN_MOTOR_R_IN2, PIN_MOTOR_R_PWM);
+#endif
 
   // Исполнительные пины
   bool lightOn_ = false;
