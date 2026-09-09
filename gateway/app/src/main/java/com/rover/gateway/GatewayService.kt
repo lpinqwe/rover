@@ -52,6 +52,8 @@ class GatewayService : Service() {
         const val KEY_PASS = "pass"
         const val KEY_SENSOR_PERIOD = "sensor_period"
 
+        const val DEFAULT_BROKER = "ssl://ed44fbaa0a7a41afaf940381fb18cd2a.s1.eu.hivemq.cloud:8883"
+
         private const val CHANNEL_ID = "rover_bridge"
         private const val NOTIF_ID = 42
 
@@ -134,8 +136,12 @@ class GatewayService : Service() {
         running = true
         startForeground(NOTIF_ID, buildNotification("Запуск..."))
         appendLog("SYS", "=== Gateway start ===")
+        // Всё тяжёлое (подключение MQTT, скан BLE) — в фоне, чтобы не морозить UI.
+        thread { startBridge() }
+    }
 
-        val broker = prefs.getString(KEY_BROKER, "ssl://ed44fbaa0a7a41afaf940381fb18cd2a.s1.eu.hivemq.cloud:8883") ?: "ssl://ed44fbaa0a7a41afaf940381fb18cd2a.s1.eu.hivemq.cloud:8883"
+    private fun startBridge() {
+        val broker = prefs.getString(KEY_BROKER, DEFAULT_BROKER) ?: DEFAULT_BROKER
         val user = prefs.getString(KEY_USER, "roverCred") ?: "roverCred"
         val pass = prefs.getString(KEY_PASS, "mqttHIVE!2#") ?: "mqttHIVE!2#"
         appendLog("SYS", "broker=$broker  user=$user")

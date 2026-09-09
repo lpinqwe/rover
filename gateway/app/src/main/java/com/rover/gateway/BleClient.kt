@@ -57,8 +57,10 @@ class BleClient(
     @SuppressLint("MissingPermission")
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
+            // Ищем ровер по имени ИЛИ по UUID сервиса (имя Android отдаёт не всегда).
             val name = result.device.name ?: ""
-            if (name == "ROVER-S3" || name.startsWith("ROVER")) {
+            val svcOk = result.scanRecord?.serviceUuids?.any { it.uuid == Protocol.Uuids.SERVICE } == true
+            if (name == "ROVER-S3" || name.startsWith("ROVER") || svcOk) {
                 handler.post { stopScan(); connect(result.device) }
             }
         }
