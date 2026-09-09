@@ -11,6 +11,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.BatteryManager
+import android.os.Looper
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -59,7 +60,7 @@ class SensorHub(context: Context) : SensorEventListener {
             .build()
         val ok = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
-        if (ok) fused.requestLocationUpdates(req, locCallback, null)
+        if (ok) fused.requestLocationUpdates(req, locCallback, Looper.getMainLooper())
     }
 
     private val locCallback = object : LocationCallback() {
