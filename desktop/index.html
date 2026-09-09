@@ -29,7 +29,7 @@
   .video iframe { width: 100%; height: 100%; border: 0; }
 
   .zone { display:flex; gap:12px; flex:1; min-height:0;}
-  .joywrap { flex: 1; position: relative; touch-action: none; }
+  .joywrap { flex: 1; position: relative; touch-action: none; min-height: 220px;}
   .joypad {
     position: absolute; inset: 0; border:2px dashed #2b3a52; border-radius: 12px;
     background: radial-gradient(circle at center, #13182200, #0d1117);
@@ -42,35 +42,42 @@
   }
   .joylab { position:absolute; bottom:8px; left:12px; font-size:12px; color:#5c6c83;}
 
-  .controls { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .controls { width: 200px; align-self: start;}
+  .controls .grid { display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:8px;}
   .controls button {
-    padding: 16px 8px; font-size: 14px; border-radius: 8px; border:1px solid #2b3a52;
+    padding: 14px 8px; font-size: 14px; border-radius: 8px; border:1px solid #2b3a52;
     background:#1b2431; color:#d8dee9; cursor:pointer;
   }
   .controls button:hover { background:#24314250; }
   .controls .on { background:#2a5a3a; border-color:#3f8f5f; }
   .controls .danger { background:#5a2a2a; border-color:#8f3f3f; }
+  .controls .wide { grid-column: 1 / -1; }
 
   table { width:100%; border-collapse: collapse; font-size: 13px; }
   td { padding: 4px 6px; border-bottom:1px solid #1c2430; }
   td:first-child { color:#8fa3bd; }
   td:last-child { text-align:right; font-variant-numeric: tabular-nums; }
   .big { font-size: 18px; font-weight:600; }
+  .stamp { font-size: 11px; color:#5c6c83; text-align:right; margin-top:-4px; }
 
   .row { display:flex; gap:8px; }
   .grow { flex:1; }
   select, input, button.mini {
     background:#1b2431; color:#d8dee9; border:1px solid #2b3a52; border-radius:6px; padding:6px 8px;
   }
+  #events { font-family: ui-monospace, monospace; font-size: 11px; max-height: 180px; overflow:auto; }
+  #events .in  { color:#8fd0a0; }
+  #events .out { color:#9fc2f0; }
+  #events .err { color:#f0a0a0; }
 </style>
 </head>
 <body>
 
 <header>
   <h1>Rover Console</h1>
-  <span class="pill dot online"    id="mqttPill">MQTT</span>
-  <span class="pill dot offline"   id="blePill">BLE</span>
-  <span class="pill dot offline"   id="espPill">ESP</span>
+  <span class="pill dot offline" id="mqttPill">MQTT</span>
+  <span class="pill dot offline" id="blePill">BLE</span>
+  <span class="pill dot offline" id="espPill">ESP</span>
 </header>
 
 <main>
@@ -85,14 +92,17 @@
         <div class="knob" id="knob"></div>
         <div class="joylab" id="joyval">speed 0.00 | steer 0.00</div>
       </div>
-      <div class="controls panel" style="flex:1; align-self:start;">
+      <div class="controls panel">
         <h2>Управление</h2>
-        <button id="lightBtn">Лайт</button>
-        <button id="stopBtn" class="danger">СТОП</button>
-        <button id="mine0">Мина 1</button>
-        <button id="mine1">Мина 2</button>
-        <button id="mine2">Мина 3</button>
-        <button id="pingBtn">Пинг</button>
+        <div class="grid">
+          <button id="lightBtn">Лайт</button>
+          <button id="stopBtn" class="danger">СТОП</button>
+          <button id="mine0">Мина 1</button>
+          <button id="mine1">Мина 2</button>
+          <button id="mine2">Мина 3</button>
+          <button id="pingBtn">Пинг</button>
+          <button id="videoFull" class="wide">Видео на весь экран</button>
+        </div>
       </div>
     </div>
   </div>
@@ -114,6 +124,8 @@
       </div>
       <div class="row" style="margin-top:8px;">
         <input id="roverId" value="demo" class="grow" placeholder="rover id" />
+        <button id="connectBtn" class="mini">Подключить</button>
+        <button id="disconnectBtn" class="mini">X</button>
       </div>
       <div class="row" style="margin-top:8px;">
         <input id="ytUrl" class="grow" placeholder="URL YouTube-трансляции (Live)" />
@@ -123,17 +135,19 @@
 
     <div class="panel">
       <h2>Телеметрия ESP32</h2>
+      <div class="stamp" id="espStamp">—</div>
       <table id="espTable"></table>
     </div>
 
     <div class="panel">
       <h2>Телефон (GPS/IMU)</h2>
+      <div class="stamp" id="phoneStamp">—</div>
       <table id="phoneTable"></table>
     </div>
 
     <div class="panel">
-      <h2>События</h2>
-      <div id="events" style="font-size:12px; max-height:140px; overflow:auto;"></div>
+      <h2>События <button id="clearBtn" class="mini" style="float:right;">очистить</button></h2>
+      <div id="events"></div>
     </div>
   </div>
 </main>
@@ -141,55 +155,110 @@
 <script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
 <script>
 'use strict';
-// ---------- Конфиг ----------
-const ROOT = { cmd: 'rover/CMD/cmd', sensors: 'rover/CMD/sensors', esptelemetry: 'rover/CMD/esptelemetry', status: 'rover/CMD/status' };
-function topic(name){ return ROOT[name].replace(/CMD/, document.getElementById('roverId').value.trim() || 'demo'); }
+
+// ---------- Настройки (localStorage) ----------
+const CFG_KEY = 'rover.console.cfg.v1';
+const $ = (id) => document.getElementById(id);
+function saveCfg() {
+  localStorage.setItem(CFG_KEY, JSON.stringify({
+    host: $('wsHost').value,
+    user: $('mqttUser').value,
+    pass: $('mqttPass').value,
+    rid: $('roverId').value,
+    yt: $('ytUrl').value,
+  }));
+}
+function loadCfg() {
+  try {
+    const c = JSON.parse(localStorage.getItem(CFG_KEY));
+    if (!c) return;
+    if (c.host) $('wsHost').value = c.host;
+    if ('user' in c) $('mqttUser').value = c.user;
+    if ('pass' in c) $('mqttPass').value = c.pass;
+    if (c.rid) $('roverId').value = c.rid;
+    if (c.yt) { $('ytUrl').value = c.yt; applyYoutube(c.yt); }
+  } catch {}
+}
+
+const rid = () => $('roverId').value.trim() || 'demo';
+const topic = (name) => `rover/${rid()}/${name}`;
+
+// ---------- Лог событий ----------
+function log(msg, cls) {
+  const e = $('events');
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = `${new Date().toLocaleTimeString()}  ${msg}`;
+  e.appendChild(d);
+  while (e.children.length > 300) e.removeChild(e.firstChild);
+  e.scrollTop = e.scrollHeight;
+}
 
 // ---------- MQTT ----------
 let client = null;
-const pill = (id, ok) => {
-  const el = document.getElementById(id);
-  el.className = 'pill dot ' + (ok ? 'online' : 'offline');
-};
-const log = (m) => {
-  const e = document.getElementById('events');
-  e.innerHTML = `<div>${new Date().toLocaleTimeString()} ${m}</div>` + e.innerHTML;
-};
+let pingTimer = null;
+let subTimer = null;
+const pill = (id, ok) => { $(id).className = 'pill dot ' + (ok ? 'online' : 'offline'); };
+
 function publish(sub, obj) {
-  if (!client) return;
+  if (!client || !client.connected) return;
   client.publish(topic(sub), JSON.stringify(obj), { qos: 0 });
+  log(`→ ${topic(sub)}  ${JSON.stringify(obj)}`, 'out');
 }
+
 function connectMqtt() {
-  const host = document.getElementById('wsHost').value;
-  const cid = 'pc-' + Math.random().toString(16).slice(2, 10);
-  const opts = { clientId: cid, keepalive: 20, reconnectPeriod: 3000 };
-  const user = document.getElementById('mqttUser').value.trim();
-  const pass = document.getElementById('mqttPass').value.trim();
+  saveCfg();
+  if (client) { try { client.end(true); } catch {} client = null; }
+  pill('mqttPill', false);
+
+  const opts = {
+    clientId: 'pc-' + Math.random().toString(16).slice(2, 10),
+    keepalive: 20,
+    reconnectPeriod: 3000,
+    connectTimeout: 10000,
+  };
+  const user = $('mqttUser').value.trim();
+  const pass = $('mqttPass').value.trim();
   if (user) { opts.username = user; opts.password = pass; }
-  client = mqtt.connect(host, opts);
+
+  log(`Подключаюсь к ${$('wsHost').value}...`);
+  client = mqtt.connect($('wsHost').value, opts);
+
   client.on('connect', () => {
     pill('mqttPill', true);
-    log('MQTT connected');
-    ['cmd','sensors','esptelemetry','status'].forEach((s) => client.subscribe(topic(s)));
-    setInterval(() => publish('cmd', { type: 'ping' }), 20000);
+    log('MQTT подключён ✓');
+    ['cmd','action','sensors','esptelemetry','status'].forEach((s) => client.subscribe(topic(s)));
+    clearInterval(pingTimer);
+    pingTimer = setInterval(() => publish('action', { type: 'ping' }), 20000);
   });
-  client.on('close', () => pill('mqttPill', false));
-  client.on('message', (t, p) => onMessage(t.split('/').pop(), JSON.parse(p.toString())));
+  client.on('close', () => { pill('mqttPill', false); log('MQTT отключён', 'err'); });
+  client.on('error', (e) => {
+    pill('mqttPill', false);
+    log('MQTT ошибка: ' + (e && e.message ? e.message : e), 'err');
+  });
+  client.on('message', (t, p) => {
+    const kind = t.split('/').pop();
+    let m; try { m = JSON.parse(p.toString()); }
+    catch { log(`⇣ ${t}  (не JSON) ${p.toString()}`, 'in'); return; }
+    log(`⇣ ${t}  ${p.toString()}`, 'in');
+    onMessage(kind, m);
+  });
 }
 
 // ---------- Обработка входящих ----------
-const rows = (tbl, pairs) => {
-  tbl.innerHTML = pairs.map(([k, v, big]) =>
+function rows(pairs) {
+  return pairs.map(([k, v, big]) =>
     `<tr><td>${k}</td><td class="${big?'big':''}">${v}</td></tr>`).join('');
-};
+}
 function onMessage(kind, m) {
   if (kind === 'esptelemetry') {
     pill('espPill', true);
-    rows(document.getElementById('espTable'), [
-      ['Батарея', (m.battery ?? 0) + ' V', 1],
+    $('espStamp').textContent = new Date().toLocaleTimeString();
+    $('espTable').innerHTML = rows([
+      ['Батарея', (m.battery ?? 0).toFixed(1) + ' V', 1],
       ['Мотор L', m.left_pwm + ' %'],
       ['Мотор R', m.right_pwm + ' %'],
-      ['Наклон', (m.esp_tilt_deg ?? 0) + '°'],
+      ['Наклон', (m.esp_tilt_deg ?? 0).toFixed(1) + '°'],
       ['Tilt (защ.)', (m.tilted ? 'ДА' : 'нет')],
       ['Watchdog', (m.watchdog_stop ? 'ДА' : 'нет')],
       ['Темп. MCU', (m.mc_temp_c ?? 0) + '°C'],
@@ -197,14 +266,15 @@ function onMessage(kind, m) {
       ['ACK st.', m.ack_status],
     ]);
   } else if (kind === 'sensors') {
-    pill('blePill', true);
-    rows(document.getElementById('phoneTable'), [
+    $('phoneStamp').textContent = new Date().toLocaleTimeString();
+    const g = m.gps;
+    $('phoneTable').innerHTML = rows([
       ['Батарея тел.', (m.battery_pct ?? '?') + ' %'],
-      ['Наклон тел.', (m.tilt_deg ?? 0) + '°'],
-      ['GPS', m.gps ? `${m.gps.lat.toFixed(6)}, ${m.gps.lon.toFixed(6)}` : 'нет', 1],
-      ['Точность', m.gps ? m.gps.acc_m + ' м' : '-'],
-      ['Скорость', m.gps ? m.gps.speed_mps + ' м/с' : '-'],
-      ['GPS время', m.gps ? new Date(m.gps.ts_ms).toLocaleTimeString() : '-'],
+      ['Наклон тел.', (m.tilt_deg ?? 0).toFixed(1) + '°'],
+      ['GPS', g ? `${g.lat.toFixed(6)}, ${g.lon.toFixed(6)}` : 'нет', 1],
+      ['Точность', g ? g.acc_m + ' м' : '-'],
+      ['Скорость', g ? g.speed_mps + ' м/с' : '-'],
+      ['GPS время', g ? new Date(g.ts_ms).toLocaleTimeString() : '-'],
       ['Gyro', m.imu ? `(${m.imu.gx.toFixed(1)},${m.imu.gy.toFixed(1)},${m.imu.gz.toFixed(1)})` : '-'],
     ]);
   } else if (kind === 'status') {
@@ -213,38 +283,32 @@ function onMessage(kind, m) {
   }
 }
 
-// ---------- Джойстик (виртуальный) ----------
-const wrap = document.getElementById('joywrap');
-const knob = document.getElementById('knob');
+// ---------- Джойстик ----------
+const wrap = $('joywrap');
+const knob = $('knob');
 let dragging = false;
-let last = { speed: 0, steer: 0 };
 function updateJoystick() {
   const r = wrap.getBoundingClientRect();
   const cx = r.width / 2, cy = r.height / 2, rad = Math.min(cx, cy) * 0.75;
   const dx = (knob.offsetLeft + 60 - cx) / rad;
   const dy = (knob.offsetTop + 60 - cy) / rad;
-  const speed = -dy; // вверх = вперёд
-  const steer = dx;
-  last = { speed, steer };
+  const speed = -dy, steer = dx;
   publish('cmd', { speed: +speed.toFixed(2), steer: +steer.toFixed(2) });
-  document.getElementById('joyval').textContent = `speed ${speed.toFixed(2)} | steer ${steer.toFixed(2)}`;
+  $('joyval').textContent = `speed ${speed.toFixed(2)} | steer ${steer.toFixed(2)}`;
 }
-wrap.addEventListener('pointerdown', (e) => {
-  dragging = true; wrap.setPointerCapture(e.pointerId); moveKnob(e);
-});
+wrap.addEventListener('pointerdown', (e) => { dragging = true; wrap.setPointerCapture(e.pointerId); moveKnob(e); });
 wrap.addEventListener('pointermove', (e) => { if (dragging) moveKnob(e); });
-wrap.addEventListener('pointerup', (e) => {
+window.addEventListener('pointerup', () => {
+  if (!dragging) return;
   dragging = false;
   knob.style.left = '50%'; knob.style.top = '50%';
   publish('cmd', { speed: 0, steer: 0 });
-  document.getElementById('joyval').textContent = `speed 0.00 | steer 0.00`;
-  last = { speed: 0, steer: 0 };
+  $('joyval').textContent = 'speed 0.00 | steer 0.00';
 });
 function moveKnob(e) {
   const r = wrap.getBoundingClientRect();
   const cx = r.width / 2, cy = r.height / 2, rad = Math.min(cx, cy) * 0.75;
-  let x = e.clientX - r.left, y = e.clientY - r.top;
-  let dx = x - cx, dy = y - cy;
+  let dx = e.clientX - r.left - cx, dy = e.clientY - r.top - cy;
   const dist = Math.hypot(dx, dy);
   if (dist > rad) { dx = dx / dist * rad; dy = dy / dist * rad; }
   knob.style.left = (cx + dx) + 'px';
@@ -252,31 +316,69 @@ function moveKnob(e) {
   updateJoystick();
 }
 
+// ---------- Доп. клавиши (стрелки = движение) ----------
+const KEYSPEED = 0.8;
+const keyState = { up:false, down:false, left:false, right:false };
+let keyTimer = null;
+function driveFromKeys() {
+  let speed = (keyState.up ? 1 : 0) - (keyState.down ? 1 : 0);
+  let steer = (keyState.right ? 1 : 0) - (keyState.left ? 1 : 0);
+  speed *= KEYSPEED; steer *= KEYSPEED;
+  publish('cmd', { speed: +speed.toFixed(2), steer: +steer.toFixed(2) });
+}
+window.addEventListener('keydown', (e) => {
+  const map = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right' };
+  if (!map[e.key]) return;
+  e.preventDefault();
+  keyState[map[e.key]] = true;
+  driveFromKeys();
+  clearInterval(keyTimer);
+  keyTimer = setInterval(driveFromKeys, 150);
+});
+window.addEventListener('keyup', (e) => {
+  const map = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right' };
+  if (!map[e.key]) return;
+  keyState[map[e.key]] = false;
+  driveFromKeys();
+});
+
 // ---------- Кнопки ----------
-document.getElementById('lightBtn').onclick = function () {
+$('lightBtn').onclick = function () {
   const on = !this.classList.contains('on');
   this.classList.toggle('on', on);
   publish('action', { type: 'light', on });
 };
-document.getElementById('stopBtn').onclick = () => publish('action', { type: 'stop' });
+$('stopBtn').onclick = () => publish('action', { type: 'stop' });
 [0, 1, 2].forEach((i) => {
-  document.getElementById('mine' + i).onclick = () => publish('action', { type: 'mine', channel: i });
+  $('mine' + i).onclick = () => publish('action', { type: 'mine', channel: i });
 });
-document.getElementById('pingBtn').onclick = () => publish('action', { type: 'ping' });
+$('pingBtn').onclick = () => publish('action', { type: 'ping' });
 
-// ---------- YouTube ----------
-document.getElementById('ytBtn').onclick = () => {
-  let url = document.getElementById('ytUrl').value.trim();
+// ---------- Видео ----------
+function applyYoutube(url) {
   if (!url) return;
   let id = url.match(/[?&]v=([\w-]{6,15})/);
   if (!id) id = url.match(/youtu\.be\/([\w-]{6,15})/);
-  if (!id) { log('Не смог разобрать YouTube URL'); return; }
-  document.getElementById('video').src =
-    `https://www.youtube.com/embed/${id[1]}?autoplay=1&mute=1`;
-  log('Видео загружено: ' + id[1]);
+  if (!id) id = url.match(/^([\w-]{6,15})$/);
+  if (!id) { log('Не смог разобрать YouTube URL', 'err'); return; }
+  $('video').src = `https://www.youtube.com/embed/${id[1]}?autoplay=1&mute=1`;
+  log('Видео: ' + id[1]);
+}
+$('ytBtn').onclick = () => { saveCfg(); applyYoutube($('ytUrl').value.trim()); };
+$('videoFull').onclick = () => {
+  const v = $('video'); if (v.requestFullscreen) v.requestFullscreen();
 };
 
 // ---------- Старт ----------
+$('connectBtn').onclick = connectMqtt;
+$('disconnectBtn').onclick = () => {
+  if (client) client.end(true);
+  clearInterval(pingTimer);
+  ['mqttPill','blePill','espPill'].forEach((p) => pill(p, false));
+  log('Отключено');
+};
+$('clearBtn').onclick = () => { $('events').innerHTML = ''; };
+loadCfg();
 connectMqtt();
 </script>
 </body>
