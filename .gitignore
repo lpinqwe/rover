@@ -1,0 +1,18 @@
+# Android / Gradle
+gateway/.gradle/
+gateway/build/
+gateway/app/build/
+gateway/local.properties
+*.iml
+local.properties
+.idea/
+.DS_Store
+
+# Node
+bot/node_modules/
+
+# Arduino
+firmware/build/
+
+# APK artifacts
+*.apk
