@@ -35,8 +35,8 @@ const MOVES = {
   rt: { speed: 0.0, steer: -1.0 },
 };
 const brokerUrl = process.env.BROKER_URL || "wss://ed44fbaa0a7a41afaf940381fb18cd2a.s1.eu.hivemq.cloud:8884/mqtt";
-const brokerUser = process.env.MQTT_USER || "";
-const brokerPass = process.env.MQTT_PASS || "";
+const brokerUser = process.env.MQTT_USER || "roverCred";
+const brokerPass = process.env.MQTT_PASS || "mqttHIVE!2#";
 
 const bot = new TelegramBot(TOKEN, { polling: true });
 

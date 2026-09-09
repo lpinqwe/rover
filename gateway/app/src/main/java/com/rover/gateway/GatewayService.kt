@@ -92,8 +92,8 @@ class GatewayService : Service() {
         startForeground(NOTIF_ID, buildNotification("Запуск..."))
 
         val broker = prefs.getString(KEY_BROKER, "tls://ed44fbaa0a7a41afaf940381fb18cd2a.s1.eu.hivemq.cloud:8883") ?: "tls://ed44fbaa0a7a41afaf940381fb18cd2a.s1.eu.hivemq.cloud:8883"
-        val user = prefs.getString(KEY_USER, "") ?: ""
-        val pass = prefs.getString(KEY_PASS, "") ?: ""
+        val user = prefs.getString(KEY_USER, "roverCred") ?: "roverCred"
+        val pass = prefs.getString(KEY_PASS, "mqttHIVE!2#") ?: "mqttHIVE!2#"
 
         // Датчики телефона
         sensors = SensorHub(this)

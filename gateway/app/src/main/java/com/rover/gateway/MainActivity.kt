@@ -121,8 +121,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadPrefs() {
         etBroker.setText(prefs.getString(GatewayService.KEY_BROKER, "tls://ed44fbaa0a7a41afaf940381fb18cd2a.s1.eu.hivemq.cloud:8883"))
-        etUser.setText(prefs.getString(GatewayService.KEY_USER, ""))
-        etPass.setText(prefs.getString(GatewayService.KEY_PASS, ""))
+        etUser.setText(prefs.getString(GatewayService.KEY_USER, "roverCred"))
+        etPass.setText(prefs.getString(GatewayService.KEY_PASS, "mqttHIVE!2#"))
         etPeriod.setText(prefs.getString(GatewayService.KEY_SENSOR_PERIOD, "2000"))
         etRoverId.setText(prefs.getString(GatewayService.KEY_ROVER_ID, "demo"))
     }
