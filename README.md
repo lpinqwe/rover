@@ -21,7 +21,8 @@
 ## Кратко: как запустить
 
 1. **Прошивка**: `firmware/` — Arduino IDE + плата `esp32-s3`, библиотеки `BLE`, (`ESP32Servo` когда включишь ноги). Залить.
-2. **MQTT-брокер**: бесплатный — [HiveMQ Cloud](https://www.hivemq.com/mqtt-cloud-broker/), EMQX или `test.mosquitto.org`. В `gateway` ввести `tcp://...:1883` (у тебя интернет-тариф мобильный — нужен публичный брокер, не localhost!).
+2. **MQTT-брокер**: дефолт — твой HiveMQ Cloud кластер `ed44fbaa0a7a41afaf940381fb18cd2a.s1.eu.hivemq.cloud`
+   (телефон: `tls://…:8883`, ПК/бот: `wss://…:8884/mqtt`). Логин/пароль кластера впиши в gateway, консоль и бот.
 3. **Gateway**: установить APK на телефон, дать разрешения (GPS, Bluetooth), указать брокер и ID ровера, «Запустить». Телефон ищет `ROVER-S3` по BLE и подключается.
 4. **ПК**: открыть `desktop/index.html` в браузере, выбрать брокер (`wss://...`) и ID ровера, вставить URL YouTube-трансляции. Двигаем джойстиком.
 5. **ТГ**: `BOT_TOKEN=... npm start` в `bot/`.

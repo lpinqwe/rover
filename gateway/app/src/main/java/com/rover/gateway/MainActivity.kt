@@ -120,7 +120,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadPrefs() {
-        etBroker.setText(prefs.getString(GatewayService.KEY_BROKER, "tcp://broker.hivemq.com:1883"))
+        etBroker.setText(prefs.getString(GatewayService.KEY_BROKER, "tls://ed44fbaa0a7a41afaf940381fb18cd2a.s1.eu.hivemq.cloud:8883"))
         etUser.setText(prefs.getString(GatewayService.KEY_USER, ""))
         etPass.setText(prefs.getString(GatewayService.KEY_PASS, ""))
         etPeriod.setText(prefs.getString(GatewayService.KEY_SENSOR_PERIOD, "2000"))

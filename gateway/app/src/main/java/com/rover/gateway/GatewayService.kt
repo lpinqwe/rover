@@ -91,7 +91,7 @@ class GatewayService : Service() {
         prefs = getSharedPreferences("cfg", MODE_PRIVATE)
         startForeground(NOTIF_ID, buildNotification("Запуск..."))
 
-        val broker = prefs.getString(KEY_BROKER, "tcp://broker.hivemq.com:1883") ?: "tcp://broker.hivemq.com:1883"
+        val broker = prefs.getString(KEY_BROKER, "tls://ed44fbaa0a7a41afaf940381fb18cd2a.s1.eu.hivemq.cloud:8883") ?: "tls://ed44fbaa0a7a41afaf940381fb18cd2a.s1.eu.hivemq.cloud:8883"
         val user = prefs.getString(KEY_USER, "") ?: ""
         val pass = prefs.getString(KEY_PASS, "") ?: ""
 
