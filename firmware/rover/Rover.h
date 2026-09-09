@@ -89,6 +89,7 @@ class Rover {
   // Тайминги
   unsigned long lastCmdMs_ = 0;
   unsigned long lastTelemMs_ = 0;
+  bool watchdogLogged_ = false;
 
   // Падение
   bool tilted_ = false;

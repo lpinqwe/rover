@@ -69,8 +69,12 @@ void Rover::begin() {
 void Rover::update() {
   const unsigned long now = millis();
 
-  // Защита: если давно нет команд — стоп
+  // Защита: если давно нет команд — стоп (лог только при переходе)
   if (connected_ && (now - lastCmdMs_) > CMD_TIMEOUT_MS) {
+    if (!watchdogLogged_) {
+      watchdogLogged_ = true;
+      Serial.printf("[watchdog] нет команд %lu мс — СТОП\n", (unsigned long)CMD_TIMEOUT_MS);
+    }
     stopMotors();
   }
 
@@ -83,6 +87,19 @@ void Rover::update() {
 }
 
 // ---------------------------- ОБРАБОТКА КОМАНД ---------------------------
+
+static const char* cmdName(uint8_t c) {
+  switch (c) {
+    case CMD_DRIVE:  return "DRIVE";
+    case CMD_STOP:   return "STOP";
+    case CMD_LIGHT:  return "LIGHT";
+    case CMD_MINE:   return "MINE";
+    case CMD_LEG:    return "LEG";
+    case CMD_PING:   return "PING";
+    case CMD_RESET:  return "RESET";
+    default:         return "?";
+  }
+}
 
 void Rover::handleCmdWrite(BLECharacteristic* c) {
   std::string val = c->getValue();
@@ -113,7 +130,7 @@ void Rover::handleCmdWrite(BLECharacteristic* c) {
     return;
   }
 
-  Serial.printf("[cmd] seq=%u cmd=0x%02X len=%u\n", seq, cmd, (unsigned)n);
+  Serial.printf("[cmd] %-6s seq=%u len=%u\n", cmdName(cmd), seq, (unsigned)n);
 
   switch (cmd) {
     case CMD_DRIVE: {
@@ -125,6 +142,7 @@ void Rover::handleCmdWrite(BLECharacteristic* c) {
       break;
     }
     case CMD_STOP:
+      Serial.println("[cmd] STOP — моторы выключены");
       stopMotors();
       break;
     case CMD_LIGHT:
@@ -137,8 +155,10 @@ void Rover::handleCmdWrite(BLECharacteristic* c) {
       if (n >= 5) moveLeg(data[3], (int8_t)data[4]);
       break;
     case CMD_PING:
+      Serial.println("[cmd] PING");
       break;
     case CMD_RESET:
+      Serial.println("[cmd] RESET — перезагрузка...");
       ESP.restart();
       break;
     default:
@@ -158,6 +178,7 @@ void Rover::drive(int8_t speed, int8_t steer) {
     return;
   }
   lastCmdMs_ = millis();
+  watchdogLogged_ = false;
 
   // -100..100 → -1..1
   float s = speed / 100.0f;
