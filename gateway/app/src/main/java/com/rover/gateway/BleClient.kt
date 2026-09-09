@@ -31,6 +31,7 @@ class BleClient(
 
     var onTelemetry: ((ByteArray) -> Unit)? = null
     var onConnectedChange: ((Boolean) -> Unit)? = null
+    var onError: ((String) -> Unit)? = null
 
     @Volatile private var gatt: BluetoothGatt? = null
     private var scanning = false
@@ -107,7 +108,8 @@ class BleClient(
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                status("BLE: не удалось обнаружить сервисы")
+                status("BLE: не удалось обнаружить сервисы (code $status)")
+                onError?.invoke("BLE services discovery failed (code $status)")
                 runCatching { g.disconnect() }
                 return
             }
@@ -128,7 +130,9 @@ class BleClient(
     @SuppressLint("MissingPermission")
     private fun enableTelemetry(g: BluetoothGatt) {
         val svc = g.getService(Protocol.Uuids.SERVICE) ?: run {
-            status("BLE: сервис ровера не найден"); return
+            status("BLE: сервис ровера не найден")
+            onError?.invoke("BLE: rover service UUID not found on device")
+            return
         }
         val c = svc.getCharacteristic(Protocol.Uuids.TELEMETRY) ?: return
         val desc = c.getDescriptor(UuidUtils.CCCD) ?: return

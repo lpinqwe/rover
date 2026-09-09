@@ -28,6 +28,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etPass: EditText
     private lateinit var etPeriod: EditText
     private lateinit var etRoverId: EditText
+    private lateinit var etTgToken: EditText
+    private lateinit var etTgChat: EditText
     private lateinit var tvStatus: TextView
     private lateinit var btnStart: Button
     private lateinit var btnStop: Button
@@ -61,6 +63,8 @@ class MainActivity : AppCompatActivity() {
         etPass = EditText(this).apply { hint = "Пароль" }
         etPeriod = EditText(this).apply { hint = "Период телеметрии, мс" }
         etRoverId = EditText(this).apply { hint = "ID ровера (роver/<id>/...)" }
+        etTgToken = EditText(this).apply { hint = "TG bot token (для отправки ошибок)" }
+        etTgChat = EditText(this).apply { hint = "TG chat id (куда слать ошибки)" }
 
         btnStart = Button(this).apply { text = "Запустить" }
         btnStop = Button(this).apply { text = "Остановить" }
@@ -76,6 +80,10 @@ class MainActivity : AppCompatActivity() {
         root.addView(etPeriod)
         root.addView(label("ID ровера"))
         root.addView(etRoverId)
+        root.addView(label("TG bot token (отправка ошибок)"))
+        root.addView(etTgToken)
+        root.addView(label("TG chat id"))
+        root.addView(etTgChat)
         root.addView(btnStart)
         root.addView(btnStop)
         root.addView(tvStatus)
@@ -116,6 +124,8 @@ class MainActivity : AppCompatActivity() {
             .putString(GatewayService.KEY_PASS, etPass.text.toString())
             .putString(GatewayService.KEY_SENSOR_PERIOD, etPeriod.text.toString())
             .putString(GatewayService.KEY_ROVER_ID, etRoverId.text.toString())
+            .putString(TgNotify.KEY_TG_TOKEN, etTgToken.text.toString())
+            .putString(TgNotify.KEY_TG_CHAT, etTgChat.text.toString())
             .apply()
     }
 
@@ -125,6 +135,8 @@ class MainActivity : AppCompatActivity() {
         etPass.setText(prefs.getString(GatewayService.KEY_PASS, "mqttHIVE!2#"))
         etPeriod.setText(prefs.getString(GatewayService.KEY_SENSOR_PERIOD, "2000"))
         etRoverId.setText(prefs.getString(GatewayService.KEY_ROVER_ID, "demo"))
+        etTgToken.setText(prefs.getString(TgNotify.KEY_TG_TOKEN, TgNotify.DEFAULT_TOKEN))
+        etTgChat.setText(prefs.getString(TgNotify.KEY_TG_CHAT, TgNotify.DEFAULT_CHAT))
     }
 
     companion object {

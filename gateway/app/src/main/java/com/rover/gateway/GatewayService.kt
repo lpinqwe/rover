@@ -52,6 +52,12 @@ class GatewayService : Service() {
         handler.post { storeStatus(text) }
     }
 
+    /** Показать и отослать ошибку в ТГ-чат. */
+    private fun reportError(text: String) {
+        statusG(text)
+        TgNotify.report(prefs, "[Rover] $text")
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     /** BLE-телеметрия ESP32 → топик MQTT esptelemetry. */
@@ -101,6 +107,7 @@ class GatewayService : Service() {
         // BLE → мостят в MQTT
         ble = BleClient(this) { statusG(it) }.also { b ->
             b.onTelemetry = bridgeTelemetry(this)
+            b.onError = { reportError(it) }
             b.onConnectedChange = { c ->
                 mqtt?.publish("$topicPrefix/status", JSONObject().apply {
                     put("ble_connected", c)
@@ -115,6 +122,7 @@ class GatewayService : Service() {
             contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "phone"), ::statusG).also { m ->
             m.configure(user, pass)
             m.onMessage = ::handleMqttMessage
+            m.onError = { reportError(it) }
             m.onConnectedChange = { c ->
                 mqtt?.publish("$topicPrefix/status", JSONObject().apply {
                     put("mqtt_connected", c)

@@ -23,6 +23,7 @@ class MqttClient(
 
     var onMessage: ((topic: String, payload: String) -> Unit)? = null
     var onConnectedChange: ((Boolean) -> Unit)? = null
+    var onError: ((String) -> Unit)? = null
 
     @Volatile var connected = false
         private set
@@ -63,7 +64,8 @@ class MqttClient(
                 override fun connectionLost(cause: Throwable?) {
                     connected = false
                     onConnectedChange?.invoke(false)
-                    status("MQTT: потеряна связь")
+                    status("MQTT: потеряна связь: ${cause?.message ?: "нет причины"}")
+                    onError?.invoke("MQTT connection lost: ${cause?.message ?: "unknown"}")
                 }
 
                 override fun messageArrived(topic: String, message: MqttMessage) {
@@ -76,6 +78,7 @@ class MqttClient(
             client = c
         }.onFailure {
             status("MQTT: ошибка подключения: ${it.message}")
+            onError?.invoke("MQTT connect failed: ${it.message ?: "unknown"}")
         }
     }
 
