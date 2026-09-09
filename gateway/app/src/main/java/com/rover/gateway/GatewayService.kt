@@ -91,7 +91,7 @@ class GatewayService : Service() {
         prefs = getSharedPreferences("cfg", MODE_PRIVATE)
         startForeground(NOTIF_ID, buildNotification("Запуск..."))
 
-        val broker = prefs.getString(KEY_BROKER, "tcp://test.mosquitto.org:1883") ?: "tcp://test.mosquitto.org:1883"
+        val broker = prefs.getString(KEY_BROKER, "tcp://broker.hivemq.com:1883") ?: "tcp://broker.hivemq.com:1883"
         val user = prefs.getString(KEY_USER, "") ?: ""
         val pass = prefs.getString(KEY_PASS, "") ?: ""
 

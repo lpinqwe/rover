@@ -16,7 +16,7 @@
 
     <application
         android:label="Rover Gateway"
-        android:theme="@android:style/Theme.Material.Light"
+        android:theme="@style/Theme.RoverGateway"
         android:supportsRtl="false">
 
         <activity

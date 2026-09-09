@@ -1,41 +1,45 @@
 /**
  * Ровер-пульт через Telegram (альтернатива ПК-консоли).
  *
+ * Может работать на ЛЮБОМ токене бота, в т.ч. на том же,
+ * через который получаешь APK. Чат, куда пишешь, и есть пульт.
+ *
  * Мост: Telegram <-> MQTT <-> Телефон-шлюз <-> BLE <-> ESP32.
  *
  * Запуск:
- *   BOT_TOKEN=... ./node_modules/.bin/... или:
- *   BOT_TOKEN=1234:... npm start
+ *   BOT_TOKEN=1234:... ROVER_CHAT_ID=663450648 npm start
+ *   (ROVER_CHAT_ID опционален — без него бот отзывается в любом чате)
  *
  * Команды боту:
- *   /start   — меню
- *   /status  — текущее состояние (каждый раз пишет)
- *   /fw      — вперёд   /bw — назад   /lt — влево   /rt — вправо
- *   /s       — стоп
- *   кнопки: свет, мины 1..3, пинг, стоп
+ *   /start   — меню с кнопками
+ *   /status  — текущее состояние (GPS, батарея, наклон)
  */
 
 import TelegramBot from "node-telegram-bot-api";
 import mqtt from "mqtt";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const TOKEN = process.env.BOT_TOKEN;
 if (!TOKEN) {
-  console.error("Задай BOT_TOKEN в env и перезапусти.");
+  console.error("Задай BOT_TOKEN в env (.env) и перезапусти.");
   process.exit(1);
 }
 
+const ALLOWED_CHAT = process.env.ROVER_CHAT_ID;
 const MOVES = {
   fw: { speed: 1.0, steer: 0.0 },
   bw: { speed: -1.0, steer: 0.0 },
   lt: { speed: 0.0, steer: 1.0 },
   rt: { speed: 0.0, steer: -1.0 },
 };
+const brokerUrl = process.env.BROKER_URL || "wss://broker.hivemq.com:8884/mqtt";
 
 const bot = new TelegramBot(TOKEN, { polling: true });
-let chat = null; // запоминаем, кто управляет
 
 // --- MQTT ---
-const mq = mqtt.connect("wss://test.mosquitto.org:8081");
+const mq = mqtt.connect(brokerUrl);
 const TOPIC = (s) => `rover/${process.env.ROVER_ID || "demo"}/${s}`;
 const pub = (topic, obj) => mq.publish(topic, JSON.stringify(obj), { qos: 0 });
 
@@ -68,7 +72,11 @@ const keyboard = (keepBtns) => ({
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = (msg.text || "").trim();
-  chat = chatId;
+
+  // Если задан ROVER_CHAT_ID — бот управляет ровером только из этого чата
+  if (ALLOWED_CHAT && String(chatId) !== String(ALLOWED_CHAT)) {
+    return;
+  }
 
   if (!text) return;
   const cmd = text.toLowerCase();

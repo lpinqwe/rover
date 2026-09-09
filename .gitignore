@@ -10,6 +10,7 @@ local.properties
 
 # Node
 bot/node_modules/
+bot/.env
 
 # Arduino
 firmware/build/

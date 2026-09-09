@@ -6,6 +6,7 @@ import org.eclipse.paho.client.mqttv3.MqttClient
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions
 import org.eclipse.paho.client.mqttv3.MqttMessage
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
+import javax.net.ssl.SSLContext
 
 /**
  * Тонкая обёртка над Paho MQTT v3 (чистый Java → TCP, памяти хватает).
@@ -39,6 +40,10 @@ class MqttClient(
                 isCleanSession = false
                 connectionTimeout = 15
                 keepAliveInterval = 20
+                // tls://host:8883 (HiveMQ Cloud) — системный trust store
+                if (brokerUri.startsWith("tls://")) {
+                    socketFactory = SSLContext.getDefault().socketFactory
+                }
                 if (user.isNotBlank()) {
                     userName = user
                     this.password = pass.toCharArray()

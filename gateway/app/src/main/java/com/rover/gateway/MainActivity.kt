@@ -120,7 +120,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadPrefs() {
-        etBroker.setText(prefs.getString(GatewayService.KEY_BROKER, "tcp://test.mosquitto.org:1883"))
+        etBroker.setText(prefs.getString(GatewayService.KEY_BROKER, "tcp://broker.hivemq.com:1883"))
         etUser.setText(prefs.getString(GatewayService.KEY_USER, ""))
         etPass.setText(prefs.getString(GatewayService.KEY_PASS, ""))
         etPeriod.setText(prefs.getString(GatewayService.KEY_SENSOR_PERIOD, "2000"))
