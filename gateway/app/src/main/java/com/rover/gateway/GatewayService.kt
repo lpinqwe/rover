@@ -46,9 +46,20 @@ class GatewayService : Service() {
 
         private const val CHANNEL_ID = "rover_bridge"
         private const val NOTIF_ID = 42
+
+        /** Лог для отладочной консоли в MainActivity. Список (timestamp, message). */
+        val logBuffer = mutableListOf<Pair<Long, String>>()
+
+        fun appendLog(tag: String, msg: String) {
+            synchronized(logBuffer) {
+                logBuffer.add(Pair(System.currentTimeMillis(), "[$tag] $msg"))
+                if (logBuffer.size > 2000) logBuffer.removeAt(0)
+            }
+        }
     }
 
     private fun statusG(text: String) {
+        appendLog("SYS", text)
         handler.post { storeStatus(text) }
     }
 
@@ -78,6 +89,7 @@ class GatewayService : Service() {
             m.put("esp_tilt_deg", t.tiltTenths / 10.0)
             m.put("leg_bits", t.legBits)
             owner.mqtt?.publish("$topicPrefix/esptelemetry", m.toString())
+            appendLog("BLE_RX", "bat=${t.batteryVolts / 10.0}V  L=${t.leftPwm}%  R=${t.rightPwm}%  tilt=${t.tiltTenths / 10.0}°  temp=${t.tempC}°C  ack=${t.ackSeq}/${t.ackStatus}")
         }
     }
 
@@ -96,10 +108,12 @@ class GatewayService : Service() {
     private fun start() {
         prefs = getSharedPreferences("cfg", MODE_PRIVATE)
         startForeground(NOTIF_ID, buildNotification("Запуск..."))
+        appendLog("SYS", "=== Gateway start ===")
 
-        val broker = prefs.getString(KEY_BROKER, "tls://ed44fbaa0a7a41afaf940381fb18cd2a.s1.eu.hivemq.cloud:8883") ?: "tls://ed44fbaa0a7a41afaf940381fb18cd2a.s1.eu.hivemq.cloud:8883"
+        val broker = prefs.getString(KEY_BROKER, "ssl://ed44fbaa0a7a41afaf940381fb18cd2a.s1.eu.hivemq.cloud:8883") ?: "ssl://ed44fbaa0a7a41afaf940381fb18cd2a.s1.eu.hivemq.cloud:8883"
         val user = prefs.getString(KEY_USER, "roverCred") ?: "roverCred"
         val pass = prefs.getString(KEY_PASS, "mqttHIVE!2#") ?: "mqttHIVE!2#"
+        appendLog("SYS", "broker=$broker  user=$user")
 
         // Датчики телефона
         sensors = SensorHub(this)
@@ -145,6 +159,7 @@ class GatewayService : Service() {
     }
 
     private fun handleMqttMessage(topic: String, payload: String) {
+        appendLog("MQTT_RX", "$topic: $payload")
         val b = ble ?: return
         if (!b.connected) {
             statusG("MQTT: команда получена, но BLE не подключён")
@@ -193,6 +208,7 @@ class GatewayService : Service() {
         }
 
         statusG("MQTT → BLE: ${cmdType} seq=$seq")
+        appendLog("MQTT_TX", "${packet.joinToString("") { "%02X".format(it) }} (${packet.size} bytes)  cmd=$cmdType")
         b.writeCommand(packet)
     }
 

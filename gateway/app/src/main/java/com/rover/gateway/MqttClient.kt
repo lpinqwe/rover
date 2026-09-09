@@ -41,8 +41,9 @@ class MqttClient(
                 isCleanSession = false
                 connectionTimeout = 15
                 keepAliveInterval = 20
-                // tls://host:8883 (HiveMQ Cloud) — системный trust store
-                if (brokerUri.startsWith("tls://")) {
+                // ssl://host:8883 (HiveMQ Cloud) — системный trust store
+                val scheme = brokerUri.substringBefore("://")
+                if (scheme == "ssl" || scheme == "tls") {
                     socketFactory = SSLContext.getDefault().socketFactory
                 }
                 if (user.isNotBlank()) {
