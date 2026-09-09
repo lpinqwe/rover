@@ -11,6 +11,7 @@
  *   2 - MotorPwmDir — Pololu MD12A (MC33926): ШИМ + DIR на каждый мотор
  *
  * Интерфейс один:  setPower(-1..1), stop()
+ * Использует старый LEDC API (ledcSetup/ledcAttachPin/ledcWrite) — совместим с ESP32 core 2.x и 3.x.
  */
 
 class MotorChannel {
@@ -50,11 +51,13 @@ class MotorStub : public MotorChannel {
 // Включается в config.h:  #define MOTOR_DRIVER_TYPE 1
 class MotorL298N : public MotorChannel {
  public:
-  MotorL298N(const char* name, int pinA, int pinB, int pinPWM)
-      : name_(name), pinA_(pinA), pinB_(pinB), pinPWM_(pinPWM), power_(0) {
+  MotorL298N(const char* name, int pinA, int pinB, int pinPWM, int ledcChannel = 0)
+      : name_(name), pinA_(pinA), pinB_(pinB), pinPWM_(pinPWM), channel_(ledcChannel), power_(0) {
     pinMode(pinA_, OUTPUT);
     pinMode(pinB_, OUTPUT);
-    ledcAttach(pinPWM_, PWM_FREQ, PWM_RES_BITS);
+    pinMode(pinPWM_, OUTPUT);
+    ledcSetup(channel_, PWM_FREQ, PWM_RES_BITS);
+    ledcAttachPin(pinPWM_, channel_);
   }
 
   void setPower(float p) override {
@@ -62,7 +65,7 @@ class MotorL298N : public MotorChannel {
     power_ = p;
     digitalWrite(pinA_, p > 0.01f ? HIGH : LOW);
     digitalWrite(pinB_, p < -0.01f ? HIGH : LOW);
-    ledcWrite(pinPWM_, (uint32_t)(fabs(p) * ((1 << PWM_RES_BITS) - 1)));
+    ledcWrite(channel_, (uint32_t)(fabs(p) * ((1 << PWM_RES_BITS) - 1)));
   }
 
   void stop() override { setPower(0); }
@@ -72,6 +75,7 @@ class MotorL298N : public MotorChannel {
  private:
   const char* name_;
   int pinA_, pinB_, pinPWM_;
+  int channel_;
   float power_;
 };
 
@@ -79,11 +83,12 @@ class MotorL298N : public MotorChannel {
 // Включается в config.h:  #define MOTOR_DRIVER_TYPE 2
 class MotorPwmDir : public MotorChannel {
  public:
-  MotorPwmDir(const char* name, int pinPWM, int pinDIR, bool invert)
-      : name_(name), pinPWM_(pinPWM), pinDIR_(pinDIR), invert_(invert), power_(0) {
+  MotorPwmDir(const char* name, int pinPWM, int pinDIR, bool invert, int ledcChannel = 0)
+      : name_(name), pinPWM_(pinPWM), pinDIR_(pinDIR), invert_(invert), channel_(ledcChannel), power_(0) {
     pinMode(pinPWM_, OUTPUT);
     pinMode(pinDIR_, OUTPUT);
-    ledcAttach(pinPWM_, PWM_FREQ, PWM_RES_BITS);
+    ledcSetup(channel_, PWM_FREQ, PWM_RES_BITS);
+    ledcAttachPin(pinPWM_, channel_);
   }
 
   void setPower(float p) override {
@@ -91,7 +96,7 @@ class MotorPwmDir : public MotorChannel {
     power_ = p;
     // p>=0 → "вперёд"; invert_=1 переворачивает полярность DIR
     digitalWrite(pinDIR_, (p >= 0) != invert_ ? HIGH : LOW);
-    ledcWrite(pinPWM_, (uint32_t)(fabs(p) * ((1 << PWM_RES_BITS) - 1)));
+    ledcWrite(channel_, (uint32_t)(fabs(p) * ((1 << PWM_RES_BITS) - 1)));
   }
 
   void stop() override { setPower(0); }
@@ -101,6 +106,7 @@ class MotorPwmDir : public MotorChannel {
  private:
   const char* name_;
   int pinPWM_, pinDIR_;
+  int channel_;
   bool invert_;
   float power_;
 };

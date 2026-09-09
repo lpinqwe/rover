@@ -87,7 +87,7 @@
 </head>
 <body>
 
-<header>
+<header id="topHeader">
   <h1>Rover Console</h1>
   <span class="pill dot offline" id="mqttPill">MQTT</span>
   <span class="pill dot offline" id="blePill">BLE</span>
@@ -96,17 +96,24 @@
 
 <div class="content">
   <div class="left-col">
-    <div class="video panel">
+    <div class="video panel" id="pgVideo">
       <iframe id="video" src="https://www.youtube.com/embed/?autoplay=1&mute=1"
         allow="autoplay; fullscreen" allowfullscreen></iframe>
     </div>
+
+    <div class="panel" id="pgAtt">
+      <h2>Авиагоризонт (камера)</h2>
+      <div class="attitude"><canvas id="attCanvas"></canvas></div>
+      <div class="stamp" id="attStamp">—</div>
+    </div>
+
     <div class="zone">
       <div class="joywrap panel" id="joywrap">
         <div class="joypad"></div>
         <div class="knob" id="knob"></div>
         <div class="joylab" id="joyval">speed 0.00 | steer 0.00</div>
       </div>
-      <div class="controls panel">
+      <div class="controls panel" id="pgCtl">
         <h2>Управление</h2>
         <div class="grid">
           <button id="lightBtn">Лайт</button>
@@ -122,7 +129,7 @@
   </div>
 
   <div class="right-col">
-    <div class="panel">
+    <div class="panel" id="pgConn">
       <h2>Подключение</h2>
       <div class="row">
         <select id="wsHost" class="grow">
@@ -147,13 +154,13 @@
       </div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="pgEsp">
       <h2>Телеметрия ESP32</h2>
       <div class="stamp" id="espStamp">—</div>
       <table id="espTable"></table>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="pgPhone">
       <h2>Телефон (GPS/IMU)</h2>
       <div class="stamp" id="phoneStamp">—</div>
       <table id="phoneTable"></table>
@@ -161,7 +168,15 @@
   </div>
 </div>
 
-<div class="bottom">
+<button class="viewfab" id="viewFab" title="Показать / скрыть панели (V)">⚙</button>
+<div id="viewMenu">
+  <h3>Показать / скрыть</h3>
+  <div id="viewList"></div>
+  <button id="viewAll" class="mini" style="margin-top:6px;">Показать всё</button>
+  <div class="hint">клавиша V — меню</div>
+</div>
+
+<div class="bottom" id="pgBottom">
   <div class="tabs">
     <button class="tabbtn active" id="tabMqtt">MQTT лог</button>
     <button class="tabbtn" id="tabGraphs">Графики</button>
@@ -256,7 +271,7 @@ function connectMqtt(){
 
 // ---------- Телеметрия: таблицы и графики ----------
 const MAX = 120;
-const hist = { t:[], bat:[], l:[], r:[], tilt:[], temp:[], pb:[], ptilt:[] };
+const hist = { t:[], bat:[], l:[], r:[], tilt:[], temp:[], pb:[], ptilt:[], pr:[], pp:[] };
 function push(a,v){ a.push(v); if(a.length>MAX)a.shift(); }
 
 function rows(pairs){ return pairs.map(([k,v,big])=>`<tr><td>${k}</td><td class="${big?'big':''}">${v}</td></tr>`).join(''); }
@@ -268,7 +283,7 @@ const GRAPH_DEFS = [
   { id:'gTilt',  title:'Наклон, °',           color:'#f0c060', key:['t','tilt'], ymin:-50, ymax:50 },
   { id:'gTemp',  title:'Темп. MCU, °C',       color:'#f07a7a', key:['t','temp'], ymin:0, ymax:100 },
   { id:'gPBat',  title:'Батарея телефона, %', color:'#7ab8f0', key:['t','pb'],   ymin:0, ymax:100 },
-  { id:'gPTilt', title:'Наклон телефона, °',  color:'#e0a0e0', key:['t','ptilt'], ymin:-50, ymax:50 },
+  { id:'gPTilt', title:'Крен/Тангаж, °', color:'#e0a0e0', key:['t','pr'], key2:'pp', key2Label:'Pitch', ymin:-50, ymax:50 },
 ];
 let charts = {};
 function makeGraph(def){
@@ -280,7 +295,7 @@ function makeGraph(def){
   $('graphs').appendChild(wrap);
   const labels = def.key2 ? hist.t.slice(-MAX) : hist.t.slice(-MAX);
   const ds = [{ label: def.title, data: hist[def.key[1]].slice(-MAX), borderColor: def.color, backgroundColor: def.color+'22', fill:false, pointRadius:0, borderWidth:1.5 }];
-  if (def.key2) ds.push({ label: def.key2.toUpperCase(), data: hist[def.key2].slice(-MAX), borderColor: '#f0c060', fill:false, pointRadius:0, borderWidth:1.5 });
+  if (def.key2) ds.push({ label: def.key2Label || def.key2.toUpperCase(), data: hist[def.key2].slice(-MAX), borderColor: '#f0c060', fill:false, pointRadius:0, borderWidth:1.5 });
   charts[def.id] = new Chart(cv.getContext('2d'), {
     type:'line',
     data:{ labels, datasets:ds },
@@ -326,17 +341,20 @@ function onMessage(kind, m){
   } else if (kind === 'sensors'){
     $('phoneStamp').textContent = new Date().toLocaleTimeString();
     const g = m.gps;
+    if (m.imu) setAttitude(m.imu.ax, m.imu.ay, m.imu.az);
     $('phoneTable').innerHTML = rows([
       ['Батарея тел.', (m.battery_pct ?? '?') + ' %'],
       ['Наклон тел.', (m.tilt_deg ?? 0).toFixed(1)+'°'],
+      ['Крен / Тангаж', m.imu ? `${attTgt.roll.toFixed(1)}° / ${attTgt.pitch.toFixed(1)}°` : '-', 1],
       ['GPS', g ? `${g.lat.toFixed(6)}, ${g.lon.toFixed(6)}` : 'нет', 1],
       ['Точность', g ? g.acc_m+' м' : '-'],
       ['Скорость', g ? g.speed_mps+' м/с' : '-'],
       ['GPS время', g ? new Date(g.ts_ms).toLocaleTimeString() : '-'],
-      ['Gyro', m.imu ? `(${m.imu.gx.toFixed(1)},${m.imu.gy.toFixed(1)},${m.imu.gz.toFixed(1)})` : '-'],
     ]);
     push(hist.pb, m.battery_pct ?? 0);
     push(hist.ptilt, m.tilt_deg ?? 0);
+    push(hist.pr, attTgt.roll ?? 0);
+    push(hist.pp, attTgt.pitch ?? 0);
     updateGraphs();
   } else if (kind === 'status'){
     if ('ble_connected' in m) pill('blePill', !!m.ble_connected);

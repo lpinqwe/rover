@@ -102,9 +102,9 @@ static const char* cmdName(uint8_t c) {
 }
 
 void Rover::handleCmdWrite(BLECharacteristic* c) {
-  String val = c->getValue();
-  const uint8_t* data = (const uint8_t*)val.c_str();
-  const size_t n = val.length();
+  std::string val = c->getValue();
+  const uint8_t* data = (const uint8_t*)val.data();
+  const size_t n = val.size();
 
   // Проверка размера и магии
   if (n < 4 || data[0] != MAGIC_CMD) {

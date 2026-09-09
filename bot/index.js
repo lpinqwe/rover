@@ -23,7 +23,7 @@ dotenv.config();
 
 const TOKEN = process.env.BOT_TOKEN;
 if (!TOKEN) {
-  console.error("Задай BOT_TOKEN в env (.env) и перезапусти.");
+  console.error("Set BOT_TOKEN in env (.env) and restart.");
   process.exit(1);
 }
 
@@ -65,8 +65,8 @@ const keyboard = (keepBtns) => ({
   reply_markup: {
     keyboard: [
       [{ text: "fw ⬆" }, { text: "lt ⬅" }, { text: "rt ➡" }, { text: "bw ⬇" }],
-      [{ text: "Стоп ⏹" }, { text: "Свет 🔦" }, { text: "Пинг" }],
-      [{ text: "Мина 1" }, { text: "Мина 2" }, { text: "Мина 3" }],
+      [{ text: "Stop ⏹" }, { text: "Light 🔦" }, { text: "Ping" }],
+      [{ text: "Mine 1" }, { text: "Mine 2" }, { text: "Mine 3" }],
       [{ text: "/status" }],
     ],
     resize_keyboard: true,
@@ -88,7 +88,7 @@ bot.on("message", async (msg) => {
   if (cmd.startsWith("/start")) {
     await bot.sendMessage(
       chatId,
-      "Ровер-пульт. Кнопки: стрелки — движение, Стоп, Свет, Мины.\nДвижение удерживай коротко — между нажатиями робот едет, пока не отдашь /s или другой манёвр.",
+      "Rover remote. Buttons: arrows = movement, Stop, Light, Mines.\nHold movement briefly - between taps the rover keeps driving until you stop or steer.",
       keyboard(),
     );
     return;
@@ -106,28 +106,28 @@ async function publisher(chatId, cmd) {
     // Телефон-шлюз сам решает (BLE скорость/рамп). Бот шлёт однократно
     // — робот едет до следующей команды. Для рывка шлём стоп через 800мс.
     setTimeout(() => pub(TOPIC("cmd"), { speed: 0, steer: 0 }), 800);
-    await bot.sendMessage(chatId, `Двигаюсь ${cmd}...`);
+    await bot.sendMessage(chatId, `Moving ${cmd}...`);
     return;
   }
-  if (cmd === "стоп") { pub(TOPIC("action"), { type: "stop" }); return replyOk(chatId, "Стоп"); }
-  if (cmd === "свет") {
+  if (cmd === "стоп" || cmd === "stop") { pub(TOPIC("action"), { type: "stop" }); return replyOk(chatId, "Stop"); }
+  if (cmd === "свет" || cmd === "light") {
     // toggle неизвестен — спросим состояние. Простейший: вкл/выкл.
     const key = keyboard();
-    await bot.sendMessage(chatId, "Выбери:", {
+    await bot.sendMessage(chatId, "Choose:", {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "ВКЛ", callback_data: "light:1" }, { text: "ВЫКЛ", callback_data: "light:0" }],
+          [{ text: "ON", callback_data: "light:1" }, { text: "OFF", callback_data: "light:0" }],
         ],
       },
     });
     return;
   }
-  if (cmd.startsWith("мина")) {
+  if (cmd.startsWith("мина") || cmd.startsWith("mine")) {
     const i = parseInt(cmd.split(" ")[1] || "1", 10) - 1;
     pub(TOPIC("action"), { type: "mine", channel: Math.max(0, i) });
-    return replyOk(chatId, `Мина ${i + 1} активирована`);
+    return replyOk(chatId, `Mine ${i + 1} triggered`);
   }
-  if (cmd === "пинг") { pub(TOPIC("action"), { type: "ping" }); return replyOk(chatId, "Пинг"); }
+  if (cmd === "пинг" || cmd === "ping") { pub(TOPIC("action"), { type: "ping" }); return replyOk(chatId, "Ping"); }
 }
 
 bot.on("callback_query", async (q) => {
@@ -135,19 +135,19 @@ bot.on("callback_query", async (q) => {
   const data = q.data;
   if (data.startsWith("light:")) {
     pub(TOPIC("action"), { type: "light", on: data === "light:1" });
-    await bot.answerCallbackQuery(q.id, { text: "Свет: " + (data === "light:1" ? "ВКЛ" : "ВЫКЛ") });
+    await bot.answerCallbackQuery(q.id, { text: "Light: " + (data === "light:1" ? "ON" : "OFF") });
   }
 });
 
 function replyStatus(chatId) {
   const t = lastTelemetry, s = lastSensors;
   const txt = [
-    "Состояние ровера:",
-    `🔌 BLE: ${t.ble_connected ? "подключён" : "нет"} | Тел.: ${s.battery_pct ?? "?"}%`,
-    `🔋 Батарея ровера: ${t.battery ?? "?"}V | MCU: ${t.mc_temp_c ?? "?"}°C`,
+    "Rover status:",
+    `🔌 BLE: ${t.ble_connected ? "connected" : "no"} | Phone batt.: ${s.battery_pct ?? "?"}%`,
+    `🔋 Rover battery: ${t.battery ?? "?"}V | MCU: ${t.mc_temp_c ?? "?"}°C`,
     `🎚 L=${t.left_pwm ?? "?"}% R=${t.right_pwm ?? "?"}%`,
-    `🧭 Наклон: ${t.esp_tilt_deg ?? "?"}° (${t.tilted ? "⚠️ защита" : "ок"})`,
-    `📡 GPS: ${s.gps ? s.gps.lat.toFixed(5) + ", " + s.gps.lon.toFixed(5) : "нет"}`,
+    `🧭 Tilt: ${t.esp_tilt_deg ?? "?"}° (${t.tilted ? "⚠️ protection" : "ok"})`,
+    `📡 GPS: ${s.gps ? s.gps.lat.toFixed(5) + ", " + s.gps.lon.toFixed(5) : "none"}`,
   ].join("\n");
   bot.sendMessage(chatId, txt, keyboard());
 }
