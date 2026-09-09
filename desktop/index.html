@@ -7,68 +7,69 @@
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; font-family: system-ui, sans-serif; background: #0b0e14; color: #d8dee9;
-  }
-  header {
-    display: flex; gap: 12px; align-items: center; padding: 10px 14px;
-    background: #11151d; border-bottom: 1px solid #222;
-  }
-  header h1 { font-size: 16px; margin: 0 auto 0 0; }
-  .pill { padding: 4px 10px; border-radius: 999px; font-size: 12px; }
-  .pill.dot::before { content: "● "; }
-  .online  { background: #14351c; color: #6fdc8c; }
-  .offline { background: #351414; color: #dc6f6f; }
+  body { margin:0; font-family: system-ui, sans-serif; background:#0b0e14; color:#d8dee9; height:100vh; display:flex; flex-direction:column; }
+  header { display:flex; gap:12px; align-items:center; padding:8px 14px; background:#11151d; border-bottom:1px solid #222; flex:0 0 auto; }
+  header h1 { font-size:16px; margin:0 auto 0 0; }
+  .pill { padding:4px 10px; border-radius:999px; font-size:12px; }
+  .pill.dot::before { content:"● "; }
+  .online  { background:#14351c; color:#6fdc8c; }
+  .offline { background:#351414; color:#dc6f6f; }
 
-  main { display: grid; grid-template-columns: 1fr 320px; gap: 12px; padding: 12px; height: calc(100vh - 50px); }
-  .col { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-  .panel { background: #131822; border: 1px solid #222b3a; border-radius: 10px; padding: 12px; }
-  .panel h2 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: #8fa3bd; }
+  .content { flex:1 1 auto; display:flex; gap:12px; padding:12px; min-height:0; }
+  .left-col { flex:1 1 auto; display:flex; flex-direction:column; gap:12px; min-width:0; min-height:0; }
+  .right-col { flex:0 0 320px; display:flex; flex-direction:column; gap:12px; overflow:auto; }
+  .panel { background:#131822; border:1px solid #222b3a; border-radius:10px; padding:12px; }
+  .panel h2 { margin:0 0 8px; font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:#8fa3bd; }
 
-  .video { flex: 1; min-height: 200px; display: flex; align-items: center; justify-content: center; background:#000;}
-  .video iframe { width: 100%; height: 100%; border: 0; }
-
-  .zone { display:flex; gap:12px; flex:1; min-height:0;}
-  .joywrap { flex: 1; position: relative; touch-action: none; min-height: 220px;}
-  .joypad {
-    position: absolute; inset: 0; border:2px dashed #2b3a52; border-radius: 12px;
-    background: radial-gradient(circle at center, #13182200, #0d1117);
-  }
-  .knob {
-    position: absolute; width: 120px; height: 120px; border-radius: 50%;
-    background: radial-gradient(circle at 35% 35%, #2c3e5f, #16202e);
-    border: 2px solid #3a5178; transform: translate(-50%,-50%);
-    box-shadow: 0 6px 18px rgba(0,0,0,.5); pointer-events: none;
-  }
-  .joylab { position:absolute; bottom:8px; left:12px; font-size:12px; color:#5c6c83;}
-
-  .controls { width: 200px; align-self: start;}
-  .controls .grid { display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:8px;}
-  .controls button {
-    padding: 14px 8px; font-size: 14px; border-radius: 8px; border:1px solid #2b3a52;
-    background:#1b2431; color:#d8dee9; cursor:pointer;
-  }
+  .video { flex:1 1 auto; min-height:180px; display:flex; align-items:center; justify-content:center; background:#000; }
+  .video iframe { width:100%; height:100%; border:0; }
+  .zone { flex:0 0 240px; display:flex; gap:12px; min-height:0; }
+  .joywrap { flex:1; position:relative; touch-action:none; }
+  .joypad { position:absolute; inset:0; border:2px dashed #2b3a52; border-radius:12px; background:radial-gradient(circle at center,#13182200,#0d1117); }
+  .knob { position:absolute; width:120px; height:120px; border-radius:50%; background:radial-gradient(circle at 35% 35%,#2c3e5f,#16202e); border:2px solid #3a5178; transform:translate(-50%,-50%); box-shadow:0 6px 18px rgba(0,0,0,.5); pointer-events:none; }
+  .joylab { position:absolute; bottom:8px; left:12px; font-size:12px; color:#5c6c83; }
+  .controls { flex:0 0 200px; }
+  .controls .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+  .controls button { padding:12px 8px; font-size:14px; border-radius:8px; border:1px solid #2b3a52; background:#1b2431; color:#d8dee9; cursor:pointer; }
   .controls button:hover { background:#24314250; }
   .controls .on { background:#2a5a3a; border-color:#3f8f5f; }
   .controls .danger { background:#5a2a2a; border-color:#8f3f3f; }
-  .controls .wide { grid-column: 1 / -1; }
+  .controls .wide { grid-column:1 / -1; }
 
-  table { width:100%; border-collapse: collapse; font-size: 13px; }
-  td { padding: 4px 6px; border-bottom:1px solid #1c2430; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td { padding:3px 6px; border-bottom:1px solid #1c2430; }
   td:first-child { color:#8fa3bd; }
-  td:last-child { text-align:right; font-variant-numeric: tabular-nums; }
-  .big { font-size: 18px; font-weight:600; }
-  .stamp { font-size: 11px; color:#5c6c83; text-align:right; margin-top:-4px; }
+  td:last-child { text-align:right; font-variant-numeric:tabular-nums; }
+  .big { font-size:18px; font-weight:600; }
+  .stamp { font-size:11px; color:#5c6c83; text-align:right; margin-top:-4px; }
 
   .row { display:flex; gap:8px; }
   .grow { flex:1; }
-  select, input, button.mini {
-    background:#1b2431; color:#d8dee9; border:1px solid #2b3a52; border-radius:6px; padding:6px 8px;
-  }
-  #events { font-family: ui-monospace, monospace; font-size: 11px; max-height: 180px; overflow:auto; }
-  #events .in  { color:#8fd0a0; }
-  #events .out { color:#9fc2f0; }
-  #events .err { color:#f0a0a0; }
+  select, input, button.mini { background:#1b2431; color:#d8dee9; border:1px solid #2b3a52; border-radius:6px; padding:6px 8px; }
+  button.mini { cursor:pointer; }
+
+  /* --- Нижняя панель с вкладками --- */
+  .bottom { flex:0 0 300px; display:flex; flex-direction:column; padding:0 12px 12px; min-height:0; }
+  .tabs { display:flex; gap:4px; flex:0 0 auto; }
+  .tabbtn { padding:8px 16px; border:1px solid #222b3a; border-bottom:none; border-radius:8px 8px 0 0; background:#10151f; color:#8fa3bd; cursor:pointer; font-size:13px; }
+  .tabbtn.active { background:#131822; color:#d8dee9; border-color:#2a3a52; }
+  .tabpanel { flex:1 1 auto; display:none; background:#131822; border:1px solid #2a3a52; border-radius:0 8px 8px 8px; padding:10px; min-height:0; overflow:hidden; }
+  .tabpanel.active { display:flex; flex-direction:column; }
+
+  /* MQTT лог */
+  #mqttLog { flex:1; font-family:ui-monospace,monospace; font-size:12px; overflow:auto; line-height:1.5; }
+  #mqttLog .in  { color:#8fd0a0; }
+  #mqttLog .out { color:#9fc2f0; }
+  #mqttLog .err { color:#f0a0a0; }
+  #mqttLog .sys { color:#c0a8e0; }
+  .logbar { flex:0 0 auto; display:flex; gap:8px; align-items:center; padding-bottom:6px; }
+  .logbar label { font-size:12px; color:#8fa3bd; display:flex; gap:4px; align-items:center; }
+
+  /* Графики */
+  #graphs { flex-wrap:wrap; align-content:flex-start; gap:10px; overflow:auto; }
+  .chart { flex:1 1 30%; min-width:220px; background:#0f141d; border:1px solid #1c2430; border-radius:8px; padding:6px; height:180px; }
+  .chart h3 { margin:0 0 4px; font-size:11px; color:#8fa3bd; text-transform:uppercase; letter-spacing:.05em; }
+  .chart canvas { width:100% !important; height:calc(100% - 20px) !important; }
 </style>
 </head>
 <body>
@@ -80,8 +81,8 @@
   <span class="pill dot offline" id="espPill">ESP</span>
 </header>
 
-<main>
-  <div class="col">
+<div class="content">
+  <div class="left-col">
     <div class="video panel">
       <iframe id="video" src="https://www.youtube.com/embed/?autoplay=1&mute=1"
         allow="autoplay; fullscreen" allowfullscreen></iframe>
@@ -101,13 +102,13 @@
           <button id="mine1">Мина 2</button>
           <button id="mine2">Мина 3</button>
           <button id="pingBtn">Пинг</button>
-          <button id="videoFull" class="wide">Видео на весь экран</button>
+          <button id="videoFull" class="wide">Видео ⛶</button>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="col">
+  <div class="right-col">
     <div class="panel">
       <h2>Подключение</h2>
       <div class="row">
@@ -124,7 +125,7 @@
       </div>
       <div class="row" style="margin-top:8px;">
         <input id="roverId" value="demo" class="grow" placeholder="rover id" />
-        <button id="connectBtn" class="mini">Подключить</button>
+        <button id="connectBtn" class="mini">Подкл.</button>
         <button id="disconnectBtn" class="mini">X</button>
       </div>
       <div class="row" style="margin-top:8px;">
@@ -144,240 +145,279 @@
       <div class="stamp" id="phoneStamp">—</div>
       <table id="phoneTable"></table>
     </div>
-
-    <div class="panel">
-      <h2>События <button id="clearBtn" class="mini" style="float:right;">очистить</button></h2>
-      <div id="events"></div>
-    </div>
   </div>
-</main>
+</div>
+
+<div class="bottom">
+  <div class="tabs">
+    <button class="tabbtn active" id="tabMqtt">MQTT лог</button>
+    <button class="tabbtn" id="tabGraphs">Графики</button>
+  </div>
+  <div class="tabpanel active" id="panelMqtt">
+    <div class="logbar">
+      <label><input type="checkbox" id="fIn" checked> in</label>
+      <label><input type="checkbox" id="fOut" checked> out</label>
+      <label><input type="checkbox" id="fSys" checked> sys</label>
+      <label><input type="checkbox" id="fErr" checked> err</label>
+      <button id="clearBtn" class="mini">очистить</button>
+      <button id="pauseBtn" class="mini">пауза</button>
+    </div>
+    <div id="mqttLog"></div>
+  </div>
+  <div class="tabpanel" id="panelGraphs">
+    <div id="graphs"></div>
+  </div>
+</div>
 
 <script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 'use strict';
 
-// ---------- Настройки (localStorage) ----------
+// ---------- Настройки ----------
 const CFG_KEY = 'rover.console.cfg.v1';
 const $ = (id) => document.getElementById(id);
-function saveCfg() {
-  localStorage.setItem(CFG_KEY, JSON.stringify({
-    host: $('wsHost').value,
-    user: $('mqttUser').value,
-    pass: $('mqttPass').value,
-    rid: $('roverId').value,
-    yt: $('ytUrl').value,
-  }));
-}
-function loadCfg() {
-  try {
-    const c = JSON.parse(localStorage.getItem(CFG_KEY));
-    if (!c) return;
-    if (c.host) $('wsHost').value = c.host;
-    if ('user' in c) $('mqttUser').value = c.user;
-    if ('pass' in c) $('mqttPass').value = c.pass;
-    if (c.rid) $('roverId').value = c.rid;
-    if (c.yt) { $('ytUrl').value = c.yt; applyYoutube(c.yt); }
-  } catch {}
-}
-
+function saveCfg(){ localStorage.setItem(CFG_KEY, JSON.stringify({ host:$('wsHost').value, user:$('mqttUser').value, pass:$('mqttPass').value, rid:$('roverId').value, yt:$('ytUrl').value })); }
+function loadCfg(){ try{ const c=JSON.parse(localStorage.getItem(CFG_KEY)); if(!c) return;
+  if(c.host)$('wsHost').value=c.host; if('user'in c)$('mqttUser').value=c.user; if('pass'in c)$('mqttPass').value=c.pass;
+  if(c.rid)$('roverId').value=c.rid; if(c.yt){ $('ytUrl').value=c.yt; applyYoutube(c.yt);} }catch{} }
 const rid = () => $('roverId').value.trim() || 'demo';
-const topic = (name) => `rover/${rid()}/${name}`;
+const topic = (n) => `rover/${rid()}/${n}`;
 
-// ---------- Лог событий ----------
-function log(msg, cls) {
-  const e = $('events');
+// ---------- Лог ----------
+let paused = false;
+function log(msg, cls){
+  if (paused && cls !== 'err') return;
+  const e = $('mqttLog');
   const d = document.createElement('div');
-  if (cls) d.className = cls;
+  d.className = cls || 'sys';
   d.textContent = `${new Date().toLocaleTimeString()}  ${msg}`;
   e.appendChild(d);
-  while (e.children.length > 300) e.removeChild(e.firstChild);
+  while (e.children.length > 500) e.removeChild(e.firstChild);
   e.scrollTop = e.scrollHeight;
 }
+function applyFilters(){
+  const state = { in:$('fIn').checked, out:$('fOut').checked, sys:$('fSys').checked, err:$('fErr').checked };
+  [...$('mqttLog').children].forEach((d) => {
+    const c = d.className;
+    d.style.display = (c==='in'&&state.in)||(c==='out'&&state.out)||(c==='sys'&&state.sys)||(c==='err'&&state.err) ? '' : 'none';
+  });
+}
+['fIn','fOut','fSys','fErr'].forEach((id) => $(id).onchange = applyFilters);
 
 // ---------- MQTT ----------
-let client = null;
-let pingTimer = null;
-let subTimer = null;
+let client = null, pingTimer = null;
 const pill = (id, ok) => { $(id).className = 'pill dot ' + (ok ? 'online' : 'offline'); };
 
-function publish(sub, obj) {
+function publish(sub, obj){
   if (!client || !client.connected) return;
-  client.publish(topic(sub), JSON.stringify(obj), { qos: 0 });
-  log(`→ ${topic(sub)}  ${JSON.stringify(obj)}`, 'out');
+  const payload = JSON.stringify(obj);
+  client.publish(topic(sub), payload, { qos: 0 });
+  log(`→ ${topic(sub)}  ${payload}`, 'out');
 }
-
-function connectMqtt() {
+function connectMqtt(){
   saveCfg();
-  if (client) { try { client.end(true); } catch {} client = null; }
+  if (client){ try{ client.end(true); }catch{} client = null; }
   pill('mqttPill', false);
-
-  const opts = {
-    clientId: 'pc-' + Math.random().toString(16).slice(2, 10),
-    keepalive: 20,
-    reconnectPeriod: 3000,
-    connectTimeout: 10000,
-  };
-  const user = $('mqttUser').value.trim();
-  const pass = $('mqttPass').value.trim();
-  if (user) { opts.username = user; opts.password = pass; }
-
-  log(`Подключаюсь к ${$('wsHost').value}...`);
+  const opts = { clientId:'pc-'+Math.random().toString(16).slice(2,10), keepalive:20, reconnectPeriod:3000, connectTimeout:10000 };
+  const user = $('mqttUser').value.trim(), pass = $('mqttPass').value.trim();
+  if (user){ opts.username = user; opts.password = pass; }
+  log(`Соединение ${$('wsHost').value} ...`);
   client = mqtt.connect($('wsHost').value, opts);
-
   client.on('connect', () => {
     pill('mqttPill', true);
-    log('MQTT подключён ✓');
+    log('MQTT подключён ✓', 'sys');
     ['cmd','action','sensors','esptelemetry','status'].forEach((s) => client.subscribe(topic(s)));
     clearInterval(pingTimer);
-    pingTimer = setInterval(() => publish('action', { type: 'ping' }), 20000);
+    pingTimer = setInterval(() => publish('action', { type:'ping' }), 20000);
   });
   client.on('close', () => { pill('mqttPill', false); log('MQTT отключён', 'err'); });
-  client.on('error', (e) => {
-    pill('mqttPill', false);
-    log('MQTT ошибка: ' + (e && e.message ? e.message : e), 'err');
-  });
+  client.on('error', (e) => { pill('mqttPill', false); log('MQTT: ' + (e && e.message || e), 'err'); });
   client.on('message', (t, p) => {
-    const kind = t.split('/').pop();
-    let m; try { m = JSON.parse(p.toString()); }
-    catch { log(`⇣ ${t}  (не JSON) ${p.toString()}`, 'in'); return; }
-    log(`⇣ ${t}  ${p.toString()}`, 'in');
-    onMessage(kind, m);
+    const s = p.toString();
+    let m; try{ m = JSON.parse(s); }catch{ log(`⇣ ${t}  (не JSON) ${s}`, 'in'); return; }
+    log(`⇣ ${t}  ${s}`, 'in');
+    onMessage(t.split('/').pop(), m);
   });
 }
 
-// ---------- Обработка входящих ----------
-function rows(pairs) {
-  return pairs.map(([k, v, big]) =>
-    `<tr><td>${k}</td><td class="${big?'big':''}">${v}</td></tr>`).join('');
+// ---------- Телеметрия: таблицы и графики ----------
+const MAX = 120;
+const hist = { t:[], bat:[], l:[], r:[], tilt:[], temp:[], pb:[], ptilt:[] };
+function push(a,v){ a.push(v); if(a.length>MAX)a.shift(); }
+
+function rows(pairs){ return pairs.map(([k,v,big])=>`<tr><td>${k}</td><td class="${big?'big':''}">${v}</td></tr>`).join(''); }
+
+// --- Графики (Chart.js) ---
+const GRAPH_DEFS = [
+  { id:'gBat',   title:'Батарея ровера, V',   color:'#6fdc8c', key:['t','bat'],   ymin:0, ymax:13 },
+  { id:'gPwm',   title:'Моторы L/R, %',       color:'#9fc2f0', key:['t','l'],   key2:'r', ymin:-110, ymax:110 },
+  { id:'gTilt',  title:'Наклон, °',           color:'#f0c060', key:['t','tilt'], ymin:-50, ymax:50 },
+  { id:'gTemp',  title:'Темп. MCU, °C',       color:'#f07a7a', key:['t','temp'], ymin:0, ymax:100 },
+  { id:'gPBat',  title:'Батарея телефона, %', color:'#7ab8f0', key:['t','pb'],   ymin:0, ymax:100 },
+  { id:'gPTilt', title:'Наклон телефона, °',  color:'#e0a0e0', key:['t','ptilt'], ymin:-50, ymax:50 },
+];
+let charts = {};
+function makeGraph(def){
+  const wrap = document.createElement('div');
+  wrap.className = 'chart';
+  wrap.innerHTML = `<h3>${def.title}</h3>`;
+  const cv = document.createElement('canvas');
+  wrap.appendChild(cv);
+  $('graphs').appendChild(wrap);
+  const labels = def.key2 ? hist.t.slice(-MAX) : hist.t.slice(-MAX);
+  const ds = [{ label: def.title, data: hist[def.key[1]].slice(-MAX), borderColor: def.color, backgroundColor: def.color+'22', fill:false, pointRadius:0, borderWidth:1.5 }];
+  if (def.key2) ds.push({ label: def.key2.toUpperCase(), data: hist[def.key2].slice(-MAX), borderColor: '#f0c060', fill:false, pointRadius:0, borderWidth:1.5 });
+  charts[def.id] = new Chart(cv.getContext('2d'), {
+    type:'line',
+    data:{ labels, datasets:ds },
+    options:{ responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{ legend:{ display:false, labels:{ boxWidth:8, font:{ size:10 } } },
+                tooltip:{ enabled:true, mode:'index', intersect:false } },
+      scales:{ x:{ ticks:{ maxTicksLimit:6, font:{ size:9 }, color:'#5c6c83' }, grid:{ color:'#1c2430' } },
+               y:{ min:def.ymin, max:def.ymax, ticks:{ font:{ size:9 }, color:'#5c6c83' }, grid:{ color:'#1c2430' } } } }
+  });
 }
-function onMessage(kind, m) {
-  if (kind === 'esptelemetry') {
+function updateGraphs(){
+  for (const key in charts){
+    const c = charts[key];
+    if (!c) continue;
+    const def = GRAPH_DEFS.find(d => d.id === key);
+    c.data.labels = hist.t.slice(-MAX);
+    c.data.datasets[0].data = hist[def.key[1]].slice(-MAX);
+    if (def.key2) c.data.datasets[1].data = hist[def.key2].slice(-MAX);
+    c.update('none');
+  }
+}
+
+function onMessage(kind, m){
+  if (kind === 'esptelemetry'){
     pill('espPill', true);
     $('espStamp').textContent = new Date().toLocaleTimeString();
     $('espTable').innerHTML = rows([
-      ['Батарея', (m.battery ?? 0).toFixed(1) + ' V', 1],
-      ['Мотор L', m.left_pwm + ' %'],
-      ['Мотор R', m.right_pwm + ' %'],
-      ['Наклон', (m.esp_tilt_deg ?? 0).toFixed(1) + '°'],
-      ['Tilt (защ.)', (m.tilted ? 'ДА' : 'нет')],
-      ['Watchdog', (m.watchdog_stop ? 'ДА' : 'нет')],
-      ['Темп. MCU', (m.mc_temp_c ?? 0) + '°C'],
-      ['ACK seq', m.ack_seq],
-      ['ACK st.', m.ack_status],
+      ['Батарея', (m.battery??0).toFixed(1)+' V', 1],
+      ['Мотор L / R', `${m.left_pwm}% / ${m.right_pwm}%`],
+      ['Наклон', (m.esp_tilt_deg??0).toFixed(1)+'°'],
+      ['Tilt (защ.)', m.tilted ? 'ДА':'нет'],
+      ['Watchdog', m.watchdog_stop ? 'ДА':'нет'],
+      ['Темп. MCU', (m.mc_temp_c??0)+'°C'],
+      ['ACK seq/st', `${m.ack_seq} / ${m.ack_status}`],
     ]);
-  } else if (kind === 'sensors') {
+    push(hist.t, new Date().toLocaleTimeString());
+    push(hist.bat, m.battery ?? 0);
+    push(hist.l, m.left_pwm ?? 0);
+    push(hist.r, m.right_pwm ?? 0);
+    push(hist.tilt, m.esp_tilt_deg ?? 0);
+    push(hist.temp, m.mc_temp_c ?? 0);
+    updateGraphs();
+  } else if (kind === 'sensors'){
     $('phoneStamp').textContent = new Date().toLocaleTimeString();
     const g = m.gps;
     $('phoneTable').innerHTML = rows([
       ['Батарея тел.', (m.battery_pct ?? '?') + ' %'],
-      ['Наклон тел.', (m.tilt_deg ?? 0).toFixed(1) + '°'],
+      ['Наклон тел.', (m.tilt_deg ?? 0).toFixed(1)+'°'],
       ['GPS', g ? `${g.lat.toFixed(6)}, ${g.lon.toFixed(6)}` : 'нет', 1],
-      ['Точность', g ? g.acc_m + ' м' : '-'],
-      ['Скорость', g ? g.speed_mps + ' м/с' : '-'],
+      ['Точность', g ? g.acc_m+' м' : '-'],
+      ['Скорость', g ? g.speed_mps+' м/с' : '-'],
       ['GPS время', g ? new Date(g.ts_ms).toLocaleTimeString() : '-'],
       ['Gyro', m.imu ? `(${m.imu.gx.toFixed(1)},${m.imu.gy.toFixed(1)},${m.imu.gz.toFixed(1)})` : '-'],
     ]);
-  } else if (kind === 'status') {
+    push(hist.pb, m.battery_pct ?? 0);
+    push(hist.ptilt, m.tilt_deg ?? 0);
+    updateGraphs();
+  } else if (kind === 'status'){
     if ('ble_connected' in m) pill('blePill', !!m.ble_connected);
-    if ('mqtt_connected' in m) pill('mqttPill', !!m.mqtt_connected);
   }
 }
 
 // ---------- Джойстик ----------
-const wrap = $('joywrap');
-const knob = $('knob');
+const wrap = $('joywrap'), knob = $('knob');
 let dragging = false;
-function updateJoystick() {
+function updateJoystick(){
   const r = wrap.getBoundingClientRect();
-  const cx = r.width / 2, cy = r.height / 2, rad = Math.min(cx, cy) * 0.75;
-  const dx = (knob.offsetLeft + 60 - cx) / rad;
-  const dy = (knob.offsetTop + 60 - cy) / rad;
+  const cx = r.width/2, cy = r.height/2, rad = Math.min(cx,cy)*0.75;
+  const dx = (knob.offsetLeft + 60 - cx)/rad, dy = (knob.offsetTop + 60 - cy)/rad;
   const speed = -dy, steer = dx;
-  publish('cmd', { speed: +speed.toFixed(2), steer: +steer.toFixed(2) });
+  publish('cmd', { speed:+speed.toFixed(2), steer:+steer.toFixed(2) });
   $('joyval').textContent = `speed ${speed.toFixed(2)} | steer ${steer.toFixed(2)}`;
 }
-wrap.addEventListener('pointerdown', (e) => { dragging = true; wrap.setPointerCapture(e.pointerId); moveKnob(e); });
-wrap.addEventListener('pointermove', (e) => { if (dragging) moveKnob(e); });
-window.addEventListener('pointerup', () => {
-  if (!dragging) return;
-  dragging = false;
-  knob.style.left = '50%'; knob.style.top = '50%';
-  publish('cmd', { speed: 0, steer: 0 });
+wrap.addEventListener('pointerdown', (e)=>{ dragging=true; wrap.setPointerCapture(e.pointerId); moveKnob(e); });
+wrap.addEventListener('pointermove', (e)=>{ if(dragging) moveKnob(e); });
+window.addEventListener('pointerup', ()=>{
+  if(!dragging) return; dragging=false;
+  knob.style.left='50%'; knob.style.top='50%';
+  publish('cmd', { speed:0, steer:0 });
   $('joyval').textContent = 'speed 0.00 | steer 0.00';
 });
-function moveKnob(e) {
+function moveKnob(e){
   const r = wrap.getBoundingClientRect();
-  const cx = r.width / 2, cy = r.height / 2, rad = Math.min(cx, cy) * 0.75;
+  const cx = r.width/2, cy = r.height/2, rad = Math.min(cx,cy)*0.75;
   let dx = e.clientX - r.left - cx, dy = e.clientY - r.top - cy;
-  const dist = Math.hypot(dx, dy);
-  if (dist > rad) { dx = dx / dist * rad; dy = dy / dist * rad; }
-  knob.style.left = (cx + dx) + 'px';
-  knob.style.top = (cy + dy) + 'px';
+  const dist = Math.hypot(dx,dy);
+  if (dist > rad){ dx = dx/dist*rad; dy = dy/dist*rad; }
+  knob.style.left = (cx+dx)+'px'; knob.style.top = (cy+dy)+'px';
   updateJoystick();
 }
 
-// ---------- Доп. клавиши (стрелки = движение) ----------
-const KEYSPEED = 0.8;
-const keyState = { up:false, down:false, left:false, right:false };
+// ---------- Клавиатура ----------
+const KS = { up:false, down:false, left:false, right:false };
 let keyTimer = null;
-function driveFromKeys() {
-  let speed = (keyState.up ? 1 : 0) - (keyState.down ? 1 : 0);
-  let steer = (keyState.right ? 1 : 0) - (keyState.left ? 1 : 0);
-  speed *= KEYSPEED; steer *= KEYSPEED;
-  publish('cmd', { speed: +speed.toFixed(2), steer: +steer.toFixed(2) });
+function driveFromKeys(){
+  const speed = (KS.up?1:0)-(KS.down?1:0), steer = (KS.right?1:0)-(KS.left?1:0);
+  publish('cmd', { speed:+ (speed*0.8).toFixed(2), steer:+(steer*0.8).toFixed(2) });
 }
-window.addEventListener('keydown', (e) => {
+window.addEventListener('keydown', (e)=>{
   const map = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right' };
-  if (!map[e.key]) return;
-  e.preventDefault();
-  keyState[map[e.key]] = true;
-  driveFromKeys();
-  clearInterval(keyTimer);
-  keyTimer = setInterval(driveFromKeys, 150);
+  const k = map[e.key]; if(!k) return;
+  e.preventDefault(); KS[k]=true; driveFromKeys();
+  clearInterval(keyTimer); keyTimer = setInterval(driveFromKeys, 150);
 });
-window.addEventListener('keyup', (e) => {
+window.addEventListener('keyup', (e)=>{
   const map = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right' };
-  if (!map[e.key]) return;
-  keyState[map[e.key]] = false;
-  driveFromKeys();
+  const k = map[e.key]; if(!k) return;
+  KS[k]=false; driveFromKeys();
 });
 
 // ---------- Кнопки ----------
-$('lightBtn').onclick = function () {
-  const on = !this.classList.contains('on');
-  this.classList.toggle('on', on);
-  publish('action', { type: 'light', on });
-};
-$('stopBtn').onclick = () => publish('action', { type: 'stop' });
-[0, 1, 2].forEach((i) => {
-  $('mine' + i).onclick = () => publish('action', { type: 'mine', channel: i });
-});
-$('pingBtn').onclick = () => publish('action', { type: 'ping' });
+$('lightBtn').onclick = function(){ const on=!this.classList.contains('on'); this.classList.toggle('on',on); publish('action', { type:'light', on }); };
+$('stopBtn').onclick = () => publish('action', { type:'stop' });
+[0,1,2].forEach((i)=> $('mine'+i).onclick = () => publish('action', { type:'mine', channel:i }));
+$('pingBtn').onclick = () => publish('action', { type:'ping' });
 
 // ---------- Видео ----------
-function applyYoutube(url) {
-  if (!url) return;
+function applyYoutube(url){
+  if(!url) return;
   let id = url.match(/[?&]v=([\w-]{6,15})/);
-  if (!id) id = url.match(/youtu\.be\/([\w-]{6,15})/);
-  if (!id) id = url.match(/^([\w-]{6,15})$/);
-  if (!id) { log('Не смог разобрать YouTube URL', 'err'); return; }
+  if(!id) id = url.match(/youtu\.be\/([\w-]{6,15})/);
+  if(!id) id = url.match(/^([\w-]{6,15})$/);
+  if(!id){ log('Не разобрал YouTube URL','err'); return; }
   $('video').src = `https://www.youtube.com/embed/${id[1]}?autoplay=1&mute=1`;
-  log('Видео: ' + id[1]);
+  log('Видео: '+id[1]);
 }
 $('ytBtn').onclick = () => { saveCfg(); applyYoutube($('ytUrl').value.trim()); };
-$('videoFull').onclick = () => {
-  const v = $('video'); if (v.requestFullscreen) v.requestFullscreen();
-};
+$('videoFull').onclick = () => { const v=$('video'); if(v.requestFullscreen) v.requestFullscreen(); };
 
-// ---------- Старт ----------
-$('connectBtn').onclick = connectMqtt;
-$('disconnectBtn').onclick = () => {
-  if (client) client.end(true);
-  clearInterval(pingTimer);
-  ['mqttPill','blePill','espPill'].forEach((p) => pill(p, false));
-  log('Отключено');
+// ---------- Вкладки ----------
+const tab = (btnId, panelId) => {
+  $(btnId).onclick = () => {
+    [$('tabMqtt'), $('tabGraphs')].forEach(b=>b.classList.remove('active'));
+    [$('panelMqtt'), $('panelGraphs')].forEach(p=>p.classList.remove('active'));
+    $(btnId).classList.add('active');
+    $(panelId).classList.add('active');
+    if (panelId === 'panelGraphs') setTimeout(()=>{ Object.values(charts).forEach(c=>c.resize()); }, 30);
+  };
 };
-$('clearBtn').onclick = () => { $('events').innerHTML = ''; };
+tab('tabMqtt','panelMqtt');
+tab('tabGraphs','panelGraphs');
+
+// ---------- Лог-кнопки ----------
+$('clearBtn').onclick = () => { $('mqttLog').innerHTML=''; };
+$('pauseBtn').onclick = function(){ paused=!paused; this.textContent = paused ? '▶ возобновить' : 'пауза'; };
+$('connectBtn').onclick = connectMqtt;
+$('disconnectBtn').onclick = () => { if(client) client.end(true); clearInterval(pingTimer); ['mqttPill','blePill','espPill'].forEach(p=>pill(p,false)); log('Отключено'); };
+
+// ---------- Инициализация ----------
+GRAPH_DEFS.forEach(makeGraph);
 loadCfg();
 connectMqtt();
 </script>
