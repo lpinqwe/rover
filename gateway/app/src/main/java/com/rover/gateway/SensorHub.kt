@@ -3,34 +3,33 @@ package com.rover.gateway
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.os.BatteryManager
 import android.os.Looper
 import androidx.core.content.ContextCompat
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
-import com.google.android.gms.location.LocationServices
 import org.json.JSONObject
 
 /**
  * Собирает телеметрию самого телефона: GPS, гиро/акселерометр, уровень батареи.
- * Периодически формирует JSON-пакет для публикации в MQTT.
+ *
+ * GPS через системный LocationManager (не play-services!) — работает
+ * на любом устройстве, в т.ч. без Google Play Services / GMS.
  */
 @SuppressLint("MissingPermission")
 class SensorHub(context: Context) : SensorEventListener {
 
     private val ctx = context.applicationContext
     private val sensorManager = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    private val locManager = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
-    private var lastKnownGps: LocationResult? = null
+    @Volatile private var lastLocation: Location? = null
 
     // Сырые показания гиро у Телефона
     private var gx = 0.0
@@ -40,7 +39,11 @@ class SensorHub(context: Context) : SensorEventListener {
     private var ay = 0.0
     private var az = 0.0
 
-    private lateinit var fused: FusedLocationProviderClient
+    private val locListener = object : LocationListener {
+        override fun onLocationChanged(location: Location) {
+            lastLocation = location
+        }
+    }
 
     init {
         val accel = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -48,24 +51,23 @@ class SensorHub(context: Context) : SensorEventListener {
         if (accel != null) sensorManager.registerListener(this, accel, SensorManager.SENSOR_DELAY_NORMAL)
         if (gyro != null) sensorManager.registerListener(this, gyro, SensorManager.SENSOR_DELAY_NORMAL)
 
-        fused = LocationServices.getFusedLocationProviderClient(ctx)
         startLocation()
     }
 
     private fun startLocation() {
-        val req = LocationRequest.Builder(1000)
-            .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
-            .setMinUpdateIntervalMillis(1000)
-            .setMaxUpdateDelayMillis(2000)
-            .build()
         val ok = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
-        if (ok) fused.requestLocationUpdates(req, locCallback, Looper.getMainLooper())
-    }
+        if (!ok) return
 
-    private val locCallback = object : LocationCallback() {
-        override fun onLocationResult(result: LocationResult) {
-            lastKnownGps = result
+        val providers = listOfNotNull(
+            LocationManager.GPS_PROVIDER.takeIf { locManager.isProviderEnabled(it) },
+            LocationManager.NETWORK_PROVIDER.takeIf { locManager.isProviderEnabled(it) },
+        )
+        providers.forEach { p ->
+            runCatching {
+                locManager.requestLocationUpdates(p, 1000L, 0f, locListener, Looper.getMainLooper())
+                locManager.getLastKnownLocation(p)?.let { lastLocation = it }
+            }
         }
     }
 
@@ -96,8 +98,7 @@ class SensorHub(context: Context) : SensorEventListener {
         jo.put("ts", System.currentTimeMillis())
         jo.put("tilt_deg", (tiltDeg() * 10).toInt() / 10.0)
 
-        // GPS
-        val loc = lastKnownGps?.lastLocation
+        val loc = lastLocation
         if (loc != null) {
             val g = JSONObject()
             g.put("lat", loc.latitude)
@@ -127,6 +128,6 @@ class SensorHub(context: Context) : SensorEventListener {
 
     fun stop() {
         sensorManager.unregisterListener(this)
-        runCatching { fused.removeLocationUpdates(locCallback) }
+        runCatching { locManager.removeUpdates(locListener) }
     }
 }

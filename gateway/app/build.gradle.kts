@@ -11,8 +11,8 @@ android {
         applicationId = "com.rover.gateway"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.1.4"
+        versionCode = 5
+        versionName = "0.1.5"
     }
 
     buildTypes {
@@ -32,5 +32,4 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.activity:activity-ktx:1.8.1")
     implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
-    implementation("com.google.android.gms:play-services-location:21.0.1")
 }
