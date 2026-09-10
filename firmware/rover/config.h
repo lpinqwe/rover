@@ -12,7 +12,7 @@
 #define DEVICE_CHAR_TELEM_UUID "12345678-1234-5678-1234-56789abcdef2"
 
 // --- Служебные интервалы (мс) ---
-#define CMD_TIMEOUT_MS       300     // стоп моторами, если нет команд дольше этого
+#define CMD_TIMEOUT_MS       1000    // стоп моторами, если нет команд дольше этого
 #define TELEMETRY_PERIOD_MS  500     // период отправки телеметрии
 #define ACK_PERIOD_MS        200     // период подтверждения принятых команд
 #define ADVERTISE_ARGS       true    // setScanResponse(true) при рекламе

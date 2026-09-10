@@ -60,6 +60,7 @@ void Rover::begin() {
   // Тайминги
   lastCmdMs_ = millis();
   lastTelemMs_ = millis();
+  lastPinDbgMs_ = millis();
 
   Serial.println("[rover] ready");
 }
@@ -83,6 +84,16 @@ void Rover::update() {
     lastTelemMs_ = now;
     sampleTilt();
     sendTelemetry();
+  }
+
+  // Отладка пинов моторов: раз в 1 сек печатаем фактические уровни GPIO.
+  if ((now - lastPinDbgMs_) >= 1000) {
+    lastPinDbgMs_ = now;
+#if MOTOR_DRIVER_TYPE == 2
+    Serial.printf("[pins] L:DIR=%d PWM=%d R:DIR=%d PWM=%d\n",
+                  digitalRead(PIN_MOTOR_L_DIR), digitalRead(PIN_MOTOR_L_PWM),
+                  digitalRead(PIN_MOTOR_R_DIR), digitalRead(PIN_MOTOR_R_PWM));
+#endif
   }
 }
 

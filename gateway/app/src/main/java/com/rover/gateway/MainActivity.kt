@@ -66,6 +66,8 @@ class MainActivity : AppCompatActivity() {
     private var lightOn = false
     private var joyActive = false
     private var lastJoySend = 0L
+    private var lastSpeed = 0
+    private var lastSteer = 0
 
     private val needsPermissions = arrayOf(
         Manifest.permission.ACCESS_FINE_LOCATION,
@@ -281,6 +283,8 @@ class MainActivity : AppCompatActivity() {
 
         val speed = (-dy / r * 100).toInt().coerceIn(-100, 100)
         val steer = (dx / r * 100).toInt().coerceIn(-100, 100)
+        lastSpeed = speed
+        lastSteer = steer
         if (speed != 0 || steer != 0) {
             sendBle(GatewayService.EXTRA_CMD to "drive", GatewayService.EXTRA_SPEED to speed, GatewayService.EXTRA_STEER to steer)
         }
@@ -314,6 +318,12 @@ class MainActivity : AppCompatActivity() {
 
     private val pollTabs = object : Runnable {
         override fun run() {
+            // Keepalive: пока джойстик зажат, повторяем последнюю команду,
+            // чтобы ESP не остановил моторы вачдогом (CMD_TIMEOUT_MS).
+            if (joyActive && (lastSpeed != 0 || lastSteer != 0)) {
+                sendBle(GatewayService.EXTRA_CMD to "drive", GatewayService.EXTRA_SPEED to lastSpeed, GatewayService.EXTRA_STEER to lastSteer)
+            }
+
             tvBle.text = if (GatewayService.bleConnected) "BLE: подключён — РОВЕР ГОТОВ"
             else if (GatewayService.running) "BLE: подключение..."
             else "BLE: не подключён (нажми «Запустить» в Настройках)"
