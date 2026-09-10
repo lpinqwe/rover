@@ -19,7 +19,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * BLE-central: находит ровер, подключается, пишет команды, слушает телеметрию.
- * Управление сконфигурировано под firmware (СЕРВИС/CMD/TELEMETRY).
+ * Самовосстанавливающийся: при обрыве соединения сам инициирует рескан с
+ * нарастающей задержкой, пока [active] и BLE включен.
  */
 class BleClient(
     context: Context,
@@ -34,10 +35,17 @@ class BleClient(
     var onError: ((String) -> Unit)? = null
 
     @Volatile private var gatt: BluetoothGatt? = null
-    private var scanning = false
+    @Volatile private var scanning = false
+    private var scanAttempts = 0
+    var connected: Boolean = false
+        private set(value) {
+            if (field != value) {
+                field = value
+                onConnectedChange?.invoke(value)
+            }
+        }
 
-    @Volatile var connected = false
-        private set
+    @Volatile private var active = false
 
     private val listeners = CopyOnWriteArrayList<ConnectionObserver>()
 
@@ -52,7 +60,24 @@ class BleClient(
 
     fun isBluetoothOn(): Boolean = adapter?.isEnabled == true
 
-    /* ---------------- Скан ---------------- */
+    /* ---------------- Скан/рескан ---------------- */
+
+    private val rescanTask = object : Runnable {
+        override fun run() {
+            if (!active || connected || scanning || gatt != null) return
+            if (!isBluetoothOn()) {
+                status("BLE: адаптер выключен, жду включения...")
+                handler.postDelayed(this, 3000)
+                return
+            }
+            scanAttempts++
+            scanning = true
+            status("BLE: сканирую ROVER (попытка $scanAttempts)...")
+            adapter?.bluetoothLeScanner?.startScan(scanCallback)
+            val timeout = if (scanAttempts <= 1) 15000L else 5000L
+            handler.postDelayed({ stopScan() }, timeout)
+        }
+    }
 
     @SuppressLint("MissingPermission")
     private val scanCallback = object : ScanCallback() {
@@ -61,25 +86,30 @@ class BleClient(
             val name = result.device.name ?: ""
             val svcOk = result.scanRecord?.serviceUuids?.any { it.uuid == Protocol.Uuids.SERVICE } == true
             if (name == "ROVER-S3" || name.startsWith("ROVER") || svcOk) {
+                scanAttempts = 0
                 handler.post { stopScan(); connect(result.device) }
             }
         }
     }
 
     @SuppressLint("MissingPermission")
-    fun startScan() {
-        if (scanning || !isBluetoothOn()) return
-        scanning = true
-        status("BLE: сканирую ROVER...")
-        adapter?.bluetoothLeScanner?.startScan(scanCallback)
-        handler.postDelayed({ stopScan() }, 15000)
-    }
-
-    @SuppressLint("MissingPermission")
-    fun stopScan() {
+    private fun stopScan() {
         if (!scanning) return
         scanning = false
         adapter?.bluetoothLeScanner?.stopScan(scanCallback)
+        // не нашли ровер — пробуем снова с нарастающей паузой (до 10с)
+        if (active && !connected && gatt == null) {
+            val backoff = (scanAttempts * 1000L).coerceAtMost(10_000L)
+            handler.postDelayed(rescanTask, backoff)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun startScan() {
+        if (active) return
+        active = true
+        scanAttempts = 0
+        handler.post(rescanTask)
     }
 
     /* ---------------- Подключение ---------------- */
@@ -87,7 +117,12 @@ class BleClient(
     @SuppressLint("MissingPermission")
     private fun connect(device: BluetoothDevice) {
         status("BLE: подключаюсь к ${device.name}...")
-        gatt = device.connectGatt(null, false, gattCallback)
+        val g = device.connectGatt(null, false, gattCallback) ?: run {
+            status("BLE: connectGatt вернул null, пробую снова...")
+            handler.postDelayed(rescanTask, 2000)
+            return
+        }
+        gatt = g
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
@@ -96,13 +131,22 @@ class BleClient(
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
+                    if (status != BluetoothGatt.GATT_SUCCESS) {
+                        // ошибка статуса при «подключении» — считаем обрывом
+                        onError?.invoke("BLE connect error (status $status)")
+                        g.close()
+                        gatt = null
+                        scheduleReconnect()
+                        return
+                    }
                     gatt = g
                     handler.post { g.discoverServices() }
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
-                    setConnected(false)
+                    connected = false
                     g.close()
                     gatt = null
+                    scheduleReconnect()
                 }
             }
         }
@@ -115,7 +159,7 @@ class BleClient(
                 runCatching { g.disconnect() }
                 return
             }
-            setConnected(true)
+            connected = true
             g.let { enableTelemetry(it) }
         }
 
@@ -129,11 +173,22 @@ class BleClient(
         }
     }
 
+    private fun scheduleReconnect() {
+        if (!active) return
+        if (gatt != null) return
+        status("BLE: переподключение через 3с...")
+        handler.postDelayed(rescanTask, 3000)
+    }
+
     @SuppressLint("MissingPermission")
     private fun enableTelemetry(g: BluetoothGatt) {
         val svc = g.getService(Protocol.Uuids.SERVICE) ?: run {
             status("BLE: сервис ровера не найден")
             onError?.invoke("BLE: rover service UUID not found on device")
+            connected = false
+            g.close()
+            gatt = null
+            scheduleReconnect()
             return
         }
         val c = svc.getCharacteristic(Protocol.Uuids.TELEMETRY) ?: return
@@ -155,18 +210,16 @@ class BleClient(
         return g.writeCharacteristic(c)
     }
 
-    fun setConnected(v: Boolean) {
-        connected = v
-        onConnectedChange?.invoke(v)
-    }
-
     /* ---------------- Очистка ---------------- */
 
     @SuppressLint("MissingPermission")
     fun close() {
+        active = false
+        handler.removeCallbacksAndMessages(null)
         stopScan()
         runCatching { gatt?.disconnect() }
         gatt = null
+        connected = false
     }
 }
 

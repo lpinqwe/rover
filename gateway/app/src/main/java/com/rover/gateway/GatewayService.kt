@@ -26,6 +26,11 @@ class GatewayService : Service() {
     private var mqtt: MqttClient? = null
     private var ble: BleClient? = null
     private var sensors: SensorHub? = null
+    private var bridgeStarted = false
+    private var wakeLock: android.os.PowerManager.WakeLock? = null
+
+    private var lastReportText = ""
+    private var lastReportMs = 0L
 
     private var seq = 0
     private val topicPrefix: String
@@ -62,6 +67,9 @@ class GatewayService : Service() {
         @Volatile var bleConnected = false
         @Volatile var lastTelemetry: Protocol.Telemetry? = null
 
+        private val crashGuardStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+        private var originalUncaughtHandler: Thread.UncaughtExceptionHandler? = null
+
         /** Лог для отладочной консоли в MainActivity. Список (timestamp, message). */
         val logBuffer = mutableListOf<Pair<Long, String>>()
 
@@ -78,10 +86,29 @@ class GatewayService : Service() {
         handler.post { storeStatus(text) }
     }
 
-    /** Показать и отослать ошибку в ТГ-чат. */
+    /** Показать и отослать ошибку в ТГ-чат. Дубли подряд не шлёт (спам). */
     private fun reportError(text: String) {
         statusG(text)
+        val now = System.currentTimeMillis()
+        if (text == lastReportText && now - lastReportMs < 60_000) return
+        lastReportText = text
+        lastReportMs = now
         TgNotify.report(prefs, "[Rover] $text")
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        // Репортим краш в ТГ, потом отдаём стандартному обработчику: процесс
+        // упадёт, а START_STICKY перезапустит сервис (см. onStartCommand null).
+        if (crashGuardStarted.compareAndSet(false, true)) {
+            originalUncaughtHandler = Thread.getDefaultUncaughtExceptionHandler()
+            Thread.setDefaultUncaughtExceptionHandler { thread, e ->
+                runCatching {
+                    TgNotify.report(getSharedPreferences("cfg", MODE_PRIVATE), "[Rover] CRASH: $e")
+                }
+                originalUncaughtHandler?.uncaughtException(thread, e)
+            }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -111,6 +138,7 @@ class GatewayService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
+            null -> if (!running) start() // перезапуск ОС после гибели процесса — поднимаем мост заново
             ACTION_START -> start()
             ACTION_STOP -> {
                 running = false
@@ -132,15 +160,45 @@ class GatewayService : Service() {
     }
 
     private fun start() {
+        if (bridgeStarted) return
+        bridgeStarted = true
         prefs = getSharedPreferences("cfg", MODE_PRIVATE)
         running = true
         startForeground(NOTIF_ID, buildNotification("Запуск..."))
+        acquireWakeLock()
         appendLog("SYS", "=== Gateway start ===")
         // Всё тяжёлое (подключение MQTT, скан BLE) — в фоне, чтобы не морозить UI.
         thread { startBridge() }
+        scheduleSupervisor()
+    }
+
+    private fun acquireWakeLock() {
+        val pm = getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+        wakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "rover::bridge")
+            .apply { acquire(6 * 60 * 60 * 1000L) } // таймаут, чтобы не было утечки
+    }
+
+    private val supervisor = object : Runnable {
+        override fun run() {
+            if (!running) return
+            mqtt?.ensureConnected() // Paho сам не ретраит первичный фейл — лечим по таймеру
+            handler.postDelayed(this, 5000)
+        }
+    }
+
+    private fun scheduleSupervisor() {
+        handler.removeCallbacks(supervisor)
+        handler.postDelayed(supervisor, 5000)
     }
 
     private fun startBridge() {
+        runCatching { runBridge() }.onFailure { t ->
+            appendLog("SYS", "ОШИБКА МОСТА: $t")
+            reportError("bridge crashed: ${t.message ?: t}")
+        }
+    }
+
+    private fun runBridge() {
         val broker = prefs.getString(KEY_BROKER, DEFAULT_BROKER) ?: DEFAULT_BROKER
         val user = prefs.getString(KEY_USER, "roverCred") ?: "roverCred"
         val pass = prefs.getString(KEY_PASS, "mqttHIVE!2#") ?: "mqttHIVE!2#"
@@ -300,6 +358,9 @@ class GatewayService : Service() {
         mqtt?.disconnect()
         ble?.close()
         sensors?.stop()
+        runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
+        wakeLock = null
+        bridgeStarted = false
     }
 
     override fun onDestroy() {

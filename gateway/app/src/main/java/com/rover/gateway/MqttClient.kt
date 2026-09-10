@@ -6,11 +6,14 @@ import org.eclipse.paho.client.mqttv3.MqttClient
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions
 import org.eclipse.paho.client.mqttv3.MqttMessage
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.SSLContext
 
 /**
- * Тонкая обёртка над Paho MQTT v3 (чистый Java → TCP, памяти хватает).
- * Подписки: наш входящий JSON приходит в [onMessage].
+ * Тонкая обёртка над Paho MQTT v3.
+ * Сам чинит себя: [ensureConnected] по таймеру из GatewayService переподнимает
+ * связь, если она отвалилась или первый connect не удался (Paho сам не ретраит
+ * первичное подключение и оставляет client в null).
  */
 class MqttClient(
     private val brokerUri: String,
@@ -20,6 +23,8 @@ class MqttClient(
     private var client: MqttClient? = null
     private var user = ""
     private var pass = ""
+    private var topics: List<String> = emptyList()
+    private val connecting = AtomicBoolean(false)
 
     var onMessage: ((topic: String, payload: String) -> Unit)? = null
     var onConnectedChange: ((Boolean) -> Unit)? = null
@@ -34,53 +39,72 @@ class MqttClient(
     }
 
     fun connect(topics: List<String>) {
+        this.topics = topics
+        ensureConnected()
+    }
+
+    fun ensureConnected() {
+        val c = client
+        if (c?.isConnected == true || connecting.get()) return
+        if (c != null) {
+            runCatching { c.disconnect() }
+            client = null
+            connected = false
+        }
+        if (!connecting.compareAndSet(false, true)) return
         status("MQTT: подключаюсь к $brokerUri...")
-        runCatching {
-            val opts = MqttConnectOptions().apply {
-                isAutomaticReconnect = true
-                isCleanSession = false
-                connectionTimeout = 15
-                keepAliveInterval = 20
-                // ssl://host:8883 (HiveMQ Cloud) — системный trust store
-                val scheme = brokerUri.substringBefore("://")
-                if (scheme == "ssl" || scheme == "tls") {
-                    socketFactory = SSLContext.getDefault().socketFactory
-                }
-                if (user.isNotBlank()) {
-                    userName = user
-                    this.password = pass.toCharArray()
-                }
-            }
-            val c = MqttClient(brokerUri, clientId, MemoryPersistence())
-            c.setCallback(object : MqttCallbackExtended {
-                override fun connectComplete(reconnect: Boolean, serverURI: String) {
-                    connected = true
-                    onConnectedChange?.invoke(true)
-                    status("MQTT: подключён${if (reconnect) " (reconnect)" else ""}")
-                    topics.forEach { t ->
-                        runCatching { c.subscribe(t, 0) }
+        Thread {
+            try {
+                val opts = MqttConnectOptions().apply {
+                    // сами переподключаемся через ensureConnected (Paho не ретраит первичный фейл)
+                    isAutomaticReconnect = false
+                    isCleanSession = false
+                    connectionTimeout = 15
+                    keepAliveInterval = 20
+                    val scheme = brokerUri.substringBefore("://")
+                    if (scheme == "ssl" || scheme == "tls") {
+                        socketFactory = SSLContext.getDefault().socketFactory
+                    }
+                    if (user.isNotBlank()) {
+                        userName = user
+                        this.password = pass.toCharArray()
                     }
                 }
+                val c2 = MqttClient(brokerUri, clientId, MemoryPersistence())
+                c2.setCallback(object : MqttCallbackExtended {
+                    override fun connectComplete(reconnect: Boolean, serverURI: String) {
+                        connected = true
+                        onConnectedChange?.invoke(true)
+                        status("MQTT: подключён${if (reconnect) " (reconnect)" else ""}")
+                        topics.forEach { t ->
+                            runCatching { c2.subscribe(t, 0) }
+                        }
+                    }
 
-                override fun connectionLost(cause: Throwable?) {
+                    override fun connectionLost(cause: Throwable?) {
+                        connected = false
+                        onConnectedChange?.invoke(false)
+                        status("MQTT: потеряна связь: ${cause?.message ?: "нет причины"}")
+                        onError?.invoke("MQTT connection lost: ${cause?.message ?: "unknown"}")
+                    }
+
+                    override fun messageArrived(topic: String, message: MqttMessage) {
+                        onMessage?.invoke(topic, String(message.payload))
+                    }
+
+                    override fun deliveryComplete(token: IMqttDeliveryToken) {}
+                })
+                client = c2
+                runCatching { c2.connect(opts) }.getOrElse { t ->
+                    client = null
                     connected = false
-                    onConnectedChange?.invoke(false)
-                    status("MQTT: потеряна связь: ${cause?.message ?: "нет причины"}")
-                    onError?.invoke("MQTT connection lost: ${cause?.message ?: "unknown"}")
+                    status("MQTT: ошибка подключения: ${t.message}")
+                    onError?.invoke("MQTT connect failed: ${t.message ?: "unknown"}")
                 }
-
-                override fun messageArrived(topic: String, message: MqttMessage) {
-                    onMessage?.invoke(topic, String(message.payload))
-                }
-
-                override fun deliveryComplete(token: IMqttDeliveryToken) {}
-            })
-            c.connect(opts)
-            client = c
-        }.onFailure {
-            status("MQTT: ошибка подключения: ${it.message}")
-            onError?.invoke("MQTT connect failed: ${it.message ?: "unknown"}")
-        }
+            } finally {
+                connecting.set(false)
+            }
+        }.start()
     }
 
     fun publish(topic: String, payload: String, retain: Boolean = false) {
@@ -95,6 +119,7 @@ class MqttClient(
     }
 
     fun disconnect() {
+        connecting.set(false)
         runCatching { client?.disconnect() }
         client = null
         connected = false

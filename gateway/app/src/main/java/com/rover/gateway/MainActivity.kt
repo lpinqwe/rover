@@ -7,12 +7,14 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -69,12 +71,13 @@ class MainActivity : AppCompatActivity() {
     private var lastSpeed = 0
     private var lastSteer = 0
 
-    private val needsPermissions = arrayOf(
-        Manifest.permission.ACCESS_FINE_LOCATION,
-        Manifest.permission.ACCESS_COARSE_LOCATION,
-        Manifest.permission.BLUETOOTH_SCAN,
-        Manifest.permission.BLUETOOTH_CONNECT,
-    )
+    private val needsPermissions = buildList {
+        add(Manifest.permission.ACCESS_FINE_LOCATION)
+        add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        add(Manifest.permission.BLUETOOTH_SCAN)
+        add(Manifest.permission.BLUETOOTH_CONNECT)
+        if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS) // для FG-уведомления
+    }.toTypedArray()
 
     private val permLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -85,6 +88,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = getSharedPreferences("cfg", MODE_PRIVATE)
+        // Экран не гаснет, пока открыта панель управления (защита от «отвалился»
+        // из-за сна при неподвижной сценке).
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val dp = dp()
 
         fun label(t: String): TextView = TextView(this).apply {
@@ -374,9 +380,23 @@ class MainActivity : AppCompatActivity() {
         savePrefs()
         logOffset = 0
         tvLog.text = ""
+        // Снять с контроля Doze: иначе при выключенном экране сон рвёт BLE/MQTT.
+        requestBatteryExemption()
         val intent = Intent(this, GatewayService::class.java).setAction(GatewayService.ACTION_START)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
         showTab(controlPanel)
+    }
+
+    private fun requestBatteryExemption() {
+        if (Build.VERSION.SDK_INT < 23) return
+        val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+            runCatching {
+                startActivity(
+                    Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")),
+                )
+            }
+        }
     }
 
     private fun stopGateway() {
