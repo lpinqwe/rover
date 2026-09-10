@@ -30,14 +30,16 @@ class GatewayService : Service() {
     private var wakeLock: android.os.PowerManager.WakeLock? = null
 
     // Асинхронные публикации в MQTT, чтобы main-thread (BLE-callback) не касался сети.
-    private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val io = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "rover-io").apply { isDaemon = true }
+    }
 
+    private val seq = java.util.concurrent.atomic.AtomicInteger()
     private var lastStatusText = ""
     private var lastStatusAt = 0L
     private var tgReports = 0
     private var tgWindowStart = 0L
 
-    private var seq = 0
     private val topicPrefix: String
         get() = "rover/${prefs.getString(KEY_ROVER_ID, "demo") ?: "demo"}"
 
@@ -74,6 +76,7 @@ class GatewayService : Service() {
 
         private val crashGuardStarted = java.util.concurrent.atomic.AtomicBoolean(false)
         private var originalUncaughtHandler: Thread.UncaughtExceptionHandler? = null
+        private var lastCrashAt = 0L
 
         /** Лог для отладочной консоли в MainActivity. Список (timestamp, message). */
         val logBuffer = mutableListOf<Pair<Long, String>>()
@@ -98,7 +101,7 @@ class GatewayService : Service() {
 
     /** Публикация в MQTT вне main-thread. Безопасна после стопа моста. */
     private fun pub(block: () -> Unit) {
-        runCatching { io.execute(block) }
+        runCatching { io.execute { runCatching(block) } }
     }
 
     /** Транзитные проблемы подключения — только в лог (их чинит самовосстановление). */
@@ -127,7 +130,12 @@ class GatewayService : Service() {
             originalUncaughtHandler = Thread.getDefaultUncaughtExceptionHandler()
             Thread.setDefaultUncaughtExceptionHandler { thread, e ->
                 runCatching {
-                    TgNotify.report(getSharedPreferences("cfg", MODE_PRIVATE), "[Rover] CRASH: $e")
+                    val now = System.currentTimeMillis()
+                    // Кулдаун: при краш-лупе не флудить ТГ повторными CRASH
+                    if (now - lastCrashAt > 20_000) {
+                        lastCrashAt = now
+                        TgNotify.report(getSharedPreferences("cfg", MODE_PRIVATE), "[Rover] CRASH: $e")
+                    }
                 }
                 originalUncaughtHandler?.uncaughtException(thread, e)
             }
@@ -284,6 +292,13 @@ class GatewayService : Service() {
     }
 
     private fun handleMqttMessage(topic: String, payload: String) {
+        // Вызывается из Paho-delivery потока — не должен ронять процесс.
+        runCatching { doHandleMqtt(topic, payload) }.onFailure {
+            appendLog("MQTT_RX", "ошибка обработки: ${it.message}")
+        }
+    }
+
+    private fun doHandleMqtt(topic: String, payload: String) {
         appendLog("MQTT_RX", "$topic: $payload")
         val b = ble ?: return
         if (!b.connected) {
@@ -325,14 +340,14 @@ class GatewayService : Service() {
 
         if (cmdType == "drive" && data.isEmpty()) data = byteArrayOf(speed.toByte(), steer.toByte())
 
-        seq = (seq + 1) and 0xFF
+        val s = seq.getAndIncrement() and 0xFF
         val packet = when (cmd) {
-            Protocol.CMD_DRIVE -> Protocol.driveSeq(cmd, seq, speed, steer)
-            Protocol.CMD_STOP, Protocol.CMD_PING, Protocol.CMD_RESET -> Protocol.stopSeq(cmd, seq)
-            else -> Protocol.buildCard(cmd, seq, data)
+            Protocol.CMD_DRIVE -> Protocol.driveSeq(cmd, s, speed, steer)
+            Protocol.CMD_STOP, Protocol.CMD_PING, Protocol.CMD_RESET -> Protocol.stopSeq(cmd, s)
+            else -> Protocol.buildCard(cmd, s, data)
         }
 
-        statusG("MQTT → BLE: ${cmdType} seq=$seq")
+        statusG("MQTT → BLE: ${cmdType} seq=$s")
         appendLog("MQTT_TX", "${packet.joinToString("") { "%02X".format(it) }} (${packet.size} bytes)  cmd=$cmdType")
         b.writeCommand(packet)
     }
@@ -345,7 +360,7 @@ class GatewayService : Service() {
             return
         }
         val cmd = intent.getStringExtra(EXTRA_CMD) ?: return
-        seq = (seq + 1) and 0xFF
+        val s = seq.getAndIncrement() and 0xFF
 
         val packet: ByteArray?
         var cmdType = cmd
@@ -353,32 +368,32 @@ class GatewayService : Service() {
             "drive" -> {
                 val speed = intent.getIntExtra(EXTRA_SPEED, 0).coerceIn(-100, 100)
                 val steer = intent.getIntExtra(EXTRA_STEER, 0).coerceIn(-100, 100)
-                packet = Protocol.driveSeq(Protocol.CMD_DRIVE, seq, speed, steer)
+                packet = Protocol.driveSeq(Protocol.CMD_DRIVE, s, speed, steer)
                 cmdType = "drive(s=$speed,st=$steer)"
             }
-            "stop" -> packet = Protocol.stopSeq(Protocol.CMD_STOP, seq)
+            "stop" -> packet = Protocol.stopSeq(Protocol.CMD_STOP, s)
             "light" -> {
                 val on = intent.getBooleanExtra(EXTRA_ON, false)
-                packet = Protocol.singleSeq(Protocol.CMD_LIGHT, seq, if (on) 1 else 0)
+                packet = Protocol.singleSeq(Protocol.CMD_LIGHT, s, if (on) 1 else 0)
                 cmdType = if (on) "light:ON" else "light:OFF"
             }
             "mine" -> {
                 val ch = intent.getIntExtra(EXTRA_CHANNEL, 0)
-                packet = Protocol.singleSeq(Protocol.CMD_MINE, seq, ch)
+                packet = Protocol.singleSeq(Protocol.CMD_MINE, s, ch)
                 cmdType = "mine:#$ch"
             }
             "leg" -> {
                 val ch = intent.getIntExtra(EXTRA_CHANNEL, 0)
                 val pos = intent.getIntExtra(EXTRA_POS, 0).coerceIn(-100, 100)
-                packet = Protocol.buildCard(Protocol.CMD_LEG, seq, byteArrayOf(ch.toByte(), pos.toByte()))
+                packet = Protocol.buildCard(Protocol.CMD_LEG, s, byteArrayOf(ch.toByte(), pos.toByte()))
                 cmdType = "leg:$ch pos=$pos"
             }
-            "ping" -> packet = Protocol.stopSeq(Protocol.CMD_PING, seq)
-            "reset" -> packet = Protocol.stopSeq(Protocol.CMD_RESET, seq)
+            "ping" -> packet = Protocol.stopSeq(Protocol.CMD_PING, s)
+            "reset" -> packet = Protocol.stopSeq(Protocol.CMD_RESET, s)
             else -> return
         }
         if (packet != null) {
-            statusG("Телефон → BLE: $cmdType seq=$seq")
+            statusG("Телефон → BLE: $cmdType seq=$s")
             appendLog("LOCAL_TX", "${packet.joinToString("") { "%02X".format(it) }} (${packet.size} bytes)  cmd=$cmdType")
             b.writeCommand(packet)
         }

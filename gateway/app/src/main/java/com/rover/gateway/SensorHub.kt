@@ -31,13 +31,13 @@ class SensorHub(context: Context) : SensorEventListener {
 
     @Volatile private var lastLocation: Location? = null
 
-    // Сырые показания гиро у Телефона
-    private var gx = 0.0
-    private var gy = 0.0
-    private var gz = 0.0
-    private var ax = 0.0
-    private var ay = 0.0
-    private var az = 0.0
+    // Сырые показания гиро у Телефона (main-thread пишет, io-thread читает в buildJson)
+    @Volatile private var gx = 0.0
+    @Volatile private var gy = 0.0
+    @Volatile private var gz = 0.0
+    @Volatile private var ax = 0.0
+    @Volatile private var ay = 0.0
+    @Volatile private var az = 0.0
 
     private val locListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {

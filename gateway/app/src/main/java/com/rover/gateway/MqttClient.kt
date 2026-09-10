@@ -73,23 +73,27 @@ class MqttClient(
                 val c2 = MqttClient(brokerUri, clientId, MemoryPersistence())
                 c2.setCallback(object : MqttCallbackExtended {
                     override fun connectComplete(reconnect: Boolean, serverURI: String) {
-                        connected = true
-                        onConnectedChange?.invoke(true)
-                        status("MQTT: подключён${if (reconnect) " (reconnect)" else ""}")
-                        topics.forEach { t ->
-                            runCatching { c2.subscribe(t, 0) }
+                        runCatching {
+                            connected = true
+                            onConnectedChange?.invoke(true)
+                            status("MQTT: подключён${if (reconnect) " (reconnect)" else ""}")
+                            topics.forEach { t ->
+                                runCatching { c2.subscribe(t, 0) }
+                            }
                         }
                     }
 
                     override fun connectionLost(cause: Throwable?) {
-                        connected = false
-                        onConnectedChange?.invoke(false)
-                        status("MQTT: потеряна связь — переподключаюсь")
-                        onError?.invoke("связь потеряна, переподключение")
+                        runCatching {
+                            connected = false
+                            onConnectedChange?.invoke(false)
+                            status("MQTT: потеряна связь — переподключаюсь")
+                            onError?.invoke("связь потеряна, переподключение")
+                        }
                     }
 
                     override fun messageArrived(topic: String, message: MqttMessage) {
-                        onMessage?.invoke(topic, String(message.payload))
+                        runCatching { onMessage?.invoke(topic, String(message.payload)) }
                     }
 
                     override fun deliveryComplete(token: IMqttDeliveryToken) {}
@@ -101,6 +105,10 @@ class MqttClient(
                     status("MQTT: ошибка подключения")
                     onError?.invoke("нет связи с брокером")
                 }
+            } catch (t: Throwable) {
+                // ни один фоновый поток не должен ронять процесс
+                client = null
+                connected = false
             } finally {
                 connecting.set(false)
             }

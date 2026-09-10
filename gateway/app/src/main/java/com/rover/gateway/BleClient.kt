@@ -202,13 +202,13 @@ class BleClient(
     /* ---------------- Отправка команд ---------------- */
 
     @SuppressLint("MissingPermission")
-    fun writeCommand(data: ByteArray): Boolean {
+    fun writeCommand(data: ByteArray): Boolean = runCatching {
         val g = gatt ?: return false
         val svc = g.getService(Protocol.Uuids.SERVICE) ?: return false
         val c = svc.getCharacteristic(Protocol.Uuids.CMD) ?: return false
         c.value = data
-        return g.writeCharacteristic(c)
-    }
+        g.writeCharacteristic(c)
+    }.getOrDefault(false)
 
     /* ---------------- Очистка ---------------- */
 
