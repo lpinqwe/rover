@@ -71,6 +71,10 @@ class MainActivity : AppCompatActivity() {
     private var lastSpeed = 0
     private var lastSteer = 0
 
+    // Вачдог: если главный поток «завис», шлёт в ТГ стек всех потоков.
+    private val mainTick = java.util.concurrent.atomic.AtomicLong()
+    @Volatile private var watchdogStop = false
+
     private val needsPermissions = buildList {
         add(Manifest.permission.ACCESS_FINE_LOCATION)
         add(Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -243,7 +247,43 @@ class MainActivity : AppCompatActivity() {
         btnStart.setOnClickListener { startGateway() }
         btnStop.setOnClickListener { stopGateway() }
 
+        startWatchdog()
         handler.post(pollTabs)
+    }
+
+    /**
+     * Раз в ~5.5с проверяет, что главный поток жив (рукоятка пульса).
+     * Если пульс не выполнился за 3.5с — главный поток заблокирован, шлём
+     * в ТГ стек main-thread, а полный дамп всех потоков пишем в лог приложения.
+     */
+    private fun startWatchdog() {
+        val t = Thread {
+            while (!watchdogStop && !isDestroyed) {
+                Thread.sleep(1500)
+                handler.post { mainTick.set(System.currentTimeMillis()) }
+                Thread.sleep(4000)
+                val stuck = System.currentTimeMillis() - mainTick.get()
+                if (stuck > 3500) {
+                    val traces = Thread.getAllStackTraces()
+                    val sb = StringBuilder()
+                    for ((name, stack) in traces) {
+                        sb.append("--- $name ---\n")
+                        stack.take(12).forEach { sb.append("    $it\n") }
+                    }
+                    GatewayService.appendLog("SYS", "WATCHDOG: главный поток занят $stuck мс\n$sb")
+                    val main = traces[Thread.currentThread()] ?: emptyArray()
+                    val top = main.take(15).joinToString(" | ").take(400)
+                    TgNotify.report(prefs, "[Rover] Main thread stuck: ${stuck}ms. $top")
+                }
+            }
+        }
+        t.isDaemon = true
+        t.start()
+    }
+
+    override fun onDestroy() {
+        watchdogStop = true
+        super.onDestroy()
     }
 
     private fun tabButton(text: String): Button = Button(this).apply {
@@ -317,7 +357,9 @@ class MainActivity : AppCompatActivity() {
                 is Float -> intent.putExtra(k, v)
             }
         }
-        startService(intent)
+        // startService из фона (когда мост остановлен) кидает
+        // IllegalStateException — глотаем, чтобы не ронять приложение.
+        runCatching { startService(intent) }
     }
 
     /* ---------------- Фоновый поллинг (статус/телеметрия/лог) ---------------- */

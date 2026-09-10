@@ -29,6 +29,9 @@ class GatewayService : Service() {
     private var bridgeStarted = false
     private var wakeLock: android.os.PowerManager.WakeLock? = null
 
+    // Асинхронные публикации в MQTT, чтобы main-thread (BLE-callback) не касался сети.
+    private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
+
     private var lastReportText = ""
     private var lastReportMs = 0L
 
@@ -86,6 +89,11 @@ class GatewayService : Service() {
         handler.post { storeStatus(text) }
     }
 
+    /** Публикация в MQTT вне main-thread. Безопасна после стопа моста. */
+    private fun pub(block: () -> Unit) {
+        runCatching { io.execute(block) }
+    }
+
     /** Показать и отослать ошибку в ТГ-чат. Дубли подряд не шлёт (спам). */
     private fun reportError(text: String) {
         statusG(text)
@@ -131,7 +139,10 @@ class GatewayService : Service() {
             m.put("ack_status", t.ackStatus)
             m.put("esp_tilt_deg", t.tiltTenths / 10.0)
             m.put("leg_bits", t.legBits)
-            owner.mqtt?.publish("$topicPrefix/esptelemetry", m.toString())
+            owner.mqtt?.let { mm ->
+                val payload = m.toString()
+                owner.pub { mm.publish("$topicPrefix/esptelemetry", payload) }
+            }
             appendLog("BLE_RX", "bat=${t.batteryVolts / 10.0}V  L=${t.leftPwm}%  R=${t.rightPwm}%  tilt=${t.tiltTenths / 10.0}°  temp=${t.tempC}°C  ack=${t.ackSeq}/${t.ackStatus}")
         }
     }
@@ -213,10 +224,13 @@ class GatewayService : Service() {
             b.onError = { reportError(it) }
             b.onConnectedChange = { c ->
                 bleConnected = c
-                mqtt?.publish("$topicPrefix/status", JSONObject().apply {
-                    put("ble_connected", c)
-                    put("ts", System.currentTimeMillis())
-                }.toString())
+                mqtt?.let { mm ->
+                    val payload = JSONObject().apply {
+                        put("ble_connected", c)
+                        put("ts", System.currentTimeMillis())
+                    }.toString()
+                    pub { mm.publish("$topicPrefix/status", payload) }
+                }
             }
             b.startScan()
         }
@@ -228,10 +242,13 @@ class GatewayService : Service() {
             m.onMessage = ::handleMqttMessage
             m.onError = { reportError(it) }
             m.onConnectedChange = { c ->
-                mqtt?.publish("$topicPrefix/status", JSONObject().apply {
-                    put("mqtt_connected", c)
-                    put("ts", System.currentTimeMillis())
-                }.toString())
+                mqtt?.let { mm ->
+                    val payload = JSONObject().apply {
+                        put("mqtt_connected", c)
+                        put("ts", System.currentTimeMillis())
+                    }.toString()
+                    pub { mm.publish("$topicPrefix/status", payload) }
+                }
             }
             m.connect(listOf("$topicPrefix/cmd", "$topicPrefix/action", "$topicPrefix/config"))
         }
@@ -241,7 +258,10 @@ class GatewayService : Service() {
             override fun run() {
                 val s = sensors
                 if (s != null) {
-                    mqtt?.publish("$topicPrefix/sensors", s.buildJson().toString())
+                    mqtt?.let { mm ->
+                        val payload = s.buildJson().toString()
+                        pub { mm.publish("$topicPrefix/sensors", payload) }
+                    }
                 }
                 handler.postDelayed(this, sensorPeriodMs)
             }
@@ -361,6 +381,7 @@ class GatewayService : Service() {
         runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
         wakeLock = null
         bridgeStarted = false
+        io.shutdownNow()
     }
 
     override fun onDestroy() {
