@@ -11,8 +11,18 @@
  *   2 - MotorPwmDir — Pololu MD12A (MC33926): ШИМ + DIR на каждый мотор
  *
  * Интерфейс один:  setPower(-1..1), stop()
- * Использует старый LEDC API (ledcSetup/ledcAttachPin/ledcWrite) — совместим с ESP32 core 2.x и 3.x.
+ * Работает и на ESP32 core 2.x, и на 3.x — LEDC API выбирается сам.
  */
+
+// LEDC: в core 2.x это ledcSetup/ledcAttachPin/ledcWrite(chan),
+//       в core 3.x — ledcAttach/ledcWrite(pin).
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+  #define LEDC_BEGIN(pin, ch)        ledcAttach(pin, PWM_FREQ, PWM_RES_BITS)
+  #define LEDC_SET_POWER(pin, ch, d) ledcWrite(pin, (d))
+#else
+  #define LEDC_BEGIN(pin, ch)        ledcSetup(ch, PWM_FREQ, PWM_RES_BITS); ledcAttachPin(pin, ch)
+  #define LEDC_SET_POWER(pin, ch, d) ledcWrite(ch, (d))
+#endif
 
 class MotorChannel {
  public:
@@ -56,8 +66,7 @@ class MotorL298N : public MotorChannel {
     pinMode(pinA_, OUTPUT);
     pinMode(pinB_, OUTPUT);
     pinMode(pinPWM_, OUTPUT);
-    ledcSetup(channel_, PWM_FREQ, PWM_RES_BITS);
-    ledcAttachPin(pinPWM_, channel_);
+    LEDC_BEGIN(pinPWM_, channel_);
   }
 
   void setPower(float p) override {
@@ -65,7 +74,7 @@ class MotorL298N : public MotorChannel {
     power_ = p;
     digitalWrite(pinA_, p > 0.01f ? HIGH : LOW);
     digitalWrite(pinB_, p < -0.01f ? HIGH : LOW);
-    ledcWrite(channel_, (uint32_t)(fabs(p) * ((1 << PWM_RES_BITS) - 1)));
+    LEDC_SET_POWER(pinPWM_, channel_, (uint32_t)(fabs(p) * ((1 << PWM_RES_BITS) - 1)));
   }
 
   void stop() override { setPower(0); }
@@ -87,8 +96,7 @@ class MotorPwmDir : public MotorChannel {
       : name_(name), pinPWM_(pinPWM), pinDIR_(pinDIR), invert_(invert), channel_(ledcChannel), power_(0) {
     pinMode(pinPWM_, OUTPUT);
     pinMode(pinDIR_, OUTPUT);
-    ledcSetup(channel_, PWM_FREQ, PWM_RES_BITS);
-    ledcAttachPin(pinPWM_, channel_);
+    LEDC_BEGIN(pinPWM_, channel_);
   }
 
   void setPower(float p) override {
@@ -96,7 +104,7 @@ class MotorPwmDir : public MotorChannel {
     power_ = p;
     // p>=0 → "вперёд"; invert_=1 переворачивает полярность DIR
     digitalWrite(pinDIR_, (p >= 0) != invert_ ? HIGH : LOW);
-    ledcWrite(channel_, (uint32_t)(fabs(p) * ((1 << PWM_RES_BITS) - 1)));
+    LEDC_SET_POWER(pinPWM_, channel_, (uint32_t)(fabs(p) * ((1 << PWM_RES_BITS) - 1)));
   }
 
   void stop() override { setPower(0); }

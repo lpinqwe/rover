@@ -102,9 +102,15 @@ static const char* cmdName(uint8_t c) {
 }
 
 void Rover::handleCmdWrite(BLECharacteristic* c) {
-  std::string val = c->getValue();
-  const uint8_t* data = (const uint8_t*)val.data();
-  const size_t n = val.size();
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+  String s = c->getValue();                    // core 3.x: String
+  const uint8_t* data = (const uint8_t*)s.c_str();
+  const size_t n = s.length();
+#else
+  std::string s = c->getValue();               // core 2.x: std::string
+  const uint8_t* data = (const uint8_t*)s.data();
+  const size_t n = s.size();
+#endif
 
   // Проверка размера и магии
   if (n < 4 || data[0] != MAGIC_CMD) {
