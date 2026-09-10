@@ -84,8 +84,8 @@ class MqttClient(
                     override fun connectionLost(cause: Throwable?) {
                         connected = false
                         onConnectedChange?.invoke(false)
-                        status("MQTT: потеряна связь: ${cause?.message ?: "нет причины"}")
-                        onError?.invoke("MQTT connection lost: ${cause?.message ?: "unknown"}")
+                        status("MQTT: потеряна связь — переподключаюсь")
+                        onError?.invoke("связь потеряна, переподключение")
                     }
 
                     override fun messageArrived(topic: String, message: MqttMessage) {
@@ -98,8 +98,8 @@ class MqttClient(
                 runCatching { c2.connect(opts) }.getOrElse { t ->
                     client = null
                     connected = false
-                    status("MQTT: ошибка подключения: ${t.message}")
-                    onError?.invoke("MQTT connect failed: ${t.message ?: "unknown"}")
+                    status("MQTT: ошибка подключения")
+                    onError?.invoke("нет связи с брокером")
                 }
             } finally {
                 connecting.set(false)

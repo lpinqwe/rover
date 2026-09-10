@@ -72,7 +72,7 @@ class BleClient(
             }
             scanAttempts++
             scanning = true
-            status("BLE: сканирую ROVER (попытка $scanAttempts)...")
+            status("BLE: сканирую ROVER...")
             adapter?.bluetoothLeScanner?.startScan(scanCallback)
             val timeout = if (scanAttempts <= 1) 15000L else 5000L
             handler.postDelayed({ stopScan() }, timeout)

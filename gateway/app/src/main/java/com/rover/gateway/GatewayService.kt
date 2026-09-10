@@ -32,8 +32,10 @@ class GatewayService : Service() {
     // Асинхронные публикации в MQTT, чтобы main-thread (BLE-callback) не касался сети.
     private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
 
-    private var lastReportText = ""
-    private var lastReportMs = 0L
+    private var lastStatusText = ""
+    private var lastStatusAt = 0L
+    private var tgReports = 0
+    private var tgWindowStart = 0L
 
     private var seq = 0
     private val topicPrefix: String
@@ -85,6 +87,11 @@ class GatewayService : Service() {
     }
 
     private fun statusG(text: String) {
+        // Дедуп: одинаковый статус (напр. «подключаюсь к…» в цикле ретраев) пишем один раз в 15с.
+        val now = System.currentTimeMillis()
+        if (text == lastStatusText && now - lastStatusAt < 15_000) return
+        lastStatusText = text
+        lastStatusAt = now
         appendLog("SYS", text)
         handler.post { storeStatus(text) }
     }
@@ -94,13 +101,21 @@ class GatewayService : Service() {
         runCatching { io.execute(block) }
     }
 
-    /** Показать и отослать ошибку в ТГ-чат. Дубли подряд не шлёт (спам). */
+    /** Транзитные проблемы подключения — только в лог (их чинит самовосстановление). */
+    private fun logTransient(text: String) {
+        statusG(text)
+    }
+
+    /** Серьёзные ошибки: в лог + ТГ, но не чаще 5 раз за 5 минут. */
     private fun reportError(text: String) {
         statusG(text)
         val now = System.currentTimeMillis()
-        if (text == lastReportText && now - lastReportMs < 60_000) return
-        lastReportText = text
-        lastReportMs = now
+        if (now - tgWindowStart > 300_000) {
+            tgReports = 0
+            tgWindowStart = now
+        }
+        if (tgReports >= 5) return
+        tgReports++
         TgNotify.report(prefs, "[Rover] $text")
     }
 
@@ -221,7 +236,7 @@ class GatewayService : Service() {
         // BLE → мостят в MQTT
         ble = BleClient(this) { statusG(it) }.also { b ->
             b.onTelemetry = bridgeTelemetry(this)
-            b.onError = { reportError(it) }
+            b.onError = { logTransient("BLE: ${it}") }
             b.onConnectedChange = { c ->
                 bleConnected = c
                 mqtt?.let { mm ->
@@ -240,7 +255,7 @@ class GatewayService : Service() {
             contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "phone"), ::statusG).also { m ->
             m.configure(user, pass)
             m.onMessage = ::handleMqttMessage
-            m.onError = { reportError(it) }
+            m.onError = { logTransient("MQTT: ${it}") }
             m.onConnectedChange = { c ->
                 mqtt?.let { mm ->
                     val payload = JSONObject().apply {

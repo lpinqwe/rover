@@ -74,6 +74,7 @@ class MainActivity : AppCompatActivity() {
     // Вачдог: если главный поток «завис», шлёт в ТГ стек всех потоков.
     private val mainTick = java.util.concurrent.atomic.AtomicLong()
     @Volatile private var watchdogStop = false
+    private var lastWdReport = 0L
 
     private val needsPermissions = buildList {
         add(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -271,9 +272,13 @@ class MainActivity : AppCompatActivity() {
                         stack.take(12).forEach { sb.append("    $it\n") }
                     }
                     GatewayService.appendLog("SYS", "WATCHDOG: главный поток занят $stuck мс\n$sb")
-                    val main = traces[Thread.currentThread()] ?: emptyArray()
-                    val top = main.take(15).joinToString(" | ").take(400)
-                    TgNotify.report(prefs, "[Rover] Main thread stuck: ${stuck}ms. $top")
+                    val now = System.currentTimeMillis()
+                    if (now - lastWdReport > 60_000) { // не флудить ТГ повторами
+                        lastWdReport = now
+                        val main = traces[Thread.currentThread()] ?: emptyArray()
+                        val top = main.take(15).joinToString(" | ").take(400)
+                        TgNotify.report(prefs, "[Rover] Main thread stuck: ${stuck}ms. $top")
+                    }
                 }
             }
         }
