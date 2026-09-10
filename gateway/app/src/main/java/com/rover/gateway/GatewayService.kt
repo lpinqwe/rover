@@ -30,9 +30,15 @@ class GatewayService : Service() {
     private var wakeLock: android.os.PowerManager.WakeLock? = null
 
     // Асинхронные публикации в MQTT, чтобы main-thread (BLE-callback) не касался сети.
-    private val io = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+    private val io = java.util.concurrent.Executors.newFixedThreadPool(2) { r ->
         Thread(r, "rover-io").apply { isDaemon = true }
     }
+
+    // Периодическая телеметрия не должна занимать очередь команд.
+    private val sensorScheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "rover-sensors").apply { isDaemon = true }
+    }
+    private var sensorTask: java.util.concurrent.ScheduledFuture<*>? = null
 
     private val seq = java.util.concurrent.atomic.AtomicInteger()
     private var lastStatusText = ""
@@ -276,19 +282,23 @@ class GatewayService : Service() {
             m.connect(listOf("$topicPrefix/cmd", "$topicPrefix/action", "$topicPrefix/config"))
         }
 
-        // Периодическая телеметрия телефона
-        handler.post(object : Runnable {
-            override fun run() {
-                val s = sensors
-                if (s != null) {
-                    mqtt?.let { mm ->
-                        val payload = s.buildJson().toString()
-                        pub { mm.publish("$topicPrefix/sensors", payload) }
-                    }
+        // Периодическая телеметрия телефона — отдельный worker, не main/UI.
+        sensorTask?.cancel(false)
+        sensorTask = sensorScheduler.scheduleWithFixedDelay(
+            {
+                runCatching {
+                    val s = sensors ?: return@runCatching
+                    val mm = mqtt ?: return@runCatching
+                    val payload = s.buildJson().toString()
+                    pub { mm.publish("$topicPrefix/sensors", payload) }
+                }.onFailure {
+                    appendLog("SENSOR", "ошибка телеметрии: ${it.message}")
                 }
-                handler.postDelayed(this, sensorPeriodMs)
-            }
-        })
+            },
+            0L,
+            sensorPeriodMs.coerceAtLeast(250L),
+            java.util.concurrent.TimeUnit.MILLISECONDS,
+        )
     }
 
     private fun handleMqttMessage(topic: String, payload: String) {
@@ -408,15 +418,20 @@ class GatewayService : Service() {
         mqtt?.disconnect()
         ble?.close()
         sensors?.stop()
+        sensorTask?.cancel(false)
+        sensorTask = null
         runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
         wakeLock = null
         bridgeStarted = false
-        io.shutdownNow()
+        // Не закрываем worker-ы здесь: Android может прислать ACTION_START
+        // этому же экземпляру Service после STOP.
     }
 
     override fun onDestroy() {
         running = false
         stopAll()
+        sensorScheduler.shutdownNow()
+        io.shutdownNow()
         super.onDestroy()
     }
 
