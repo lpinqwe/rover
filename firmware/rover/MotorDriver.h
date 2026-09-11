@@ -29,6 +29,9 @@ class MotorChannel {
   virtual ~MotorChannel() {}
   virtual void setPower(float p) = 0;  // -1..1
   virtual void stop() = 0;
+  // Текущая мощность (-1..1) для телеметрии. Default = 0 для совместимости:
+  // даже если в каком-то драйвере геттер не переопределён, Rover.cpp компилируется.
+  virtual float power() const { return 0.0f; }
 };
 
 // --- Заглушка: лог в Serial, ничего не трогает ---
