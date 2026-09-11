@@ -219,7 +219,7 @@ class MotorArduinoUart : public MotorChannel {
 
   void stop() override { setPower(0); }
 
-  float power() const override { return power_; }
+  float power() const { return power_; }
 
  private:
   ArduinoBridge& bridge_;
