@@ -78,6 +78,12 @@ class Rover {
 #elif MOTOR_DRIVER_TYPE == 1
   MotorL298N left_  = MotorL298N("L", PIN_MOTOR_L_IN1, PIN_MOTOR_L_IN2, PIN_MOTOR_L_PWM, 0);
   MotorL298N right_ = MotorL298N("R", PIN_MOTOR_R_IN1, PIN_MOTOR_R_IN2, PIN_MOTOR_R_PWM, 1);
+#elif MOTOR_DRIVER_TYPE == 3
+  // Моторами рулит Arduino по UART (текстовые команды F/B/L/R/S/V...).
+  // uart_ объявлен первым, чтобы инициализироваться до моторов.
+  ArduinoBridge uart_ = ArduinoBridge();
+  MotorArduinoUart left_  = MotorArduinoUart(uart_, true);
+  MotorArduinoUart right_ = MotorArduinoUart(uart_, false);
 #else
   MotorStub left_  = MotorStub("L", PIN_MOTOR_L_IN1, PIN_MOTOR_L_IN2, PIN_MOTOR_L_PWM);
   MotorStub right_ = MotorStub("R", PIN_MOTOR_R_IN1, PIN_MOTOR_R_IN2, PIN_MOTOR_R_PWM);

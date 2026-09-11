@@ -21,7 +21,8 @@
 //   0 = заглушка (только лог, пины не трогаются)
 //   1 = L298N/TB6612 (IN1/IN2 + ШИМ EN) — 3 пина на мотор
 //   2 = Pololu MD12A (MC33926, ШИМ+DIR на канал) — 2 пина на мотор
-#define MOTOR_DRIVER_TYPE 2
+//   3 = Arduino + L298N по UART (ESP32 шлёт текстовые команды, см. ниже)
+#define MOTOR_DRIVER_TYPE 3
 #define PWM_FREQ          5000   // Hz (для MC33926 норм, обычно 20-25кГц неслышно)
 #define PWM_RES_BITS      8      // разрешение ШИМ (0..255)
 
@@ -42,6 +43,19 @@
 #  define PIN_MOTOR_R_IN1  7
 #  define PIN_MOTOR_R_IN2  8
 #  define PIN_MOTOR_R_PWM  9
+#endif
+
+#if MOTOR_DRIVER_TYPE == 3
+// --- Arduino + L298N по UART (MOTOR_DRIVER_TYPE = 3) ---
+// ESP32 передаёт моторам текстовые команды (F/B/L/R/S/1..4/V<0..255>),
+// а самими моторами и L298N рулит Arduino. Об этом же UART — см.
+// firmware/arduino_l298n/motor_controller.ino.
+//
+// Проводка:  ESP32 (UART1 TX)  ->  Arduino RX  (у Arduino ESP_RX = pin 10)
+// Обратной связи нет:  PIN_ESP_UART_RX = -1 (пин не назначается)
+#  define PIN_ESP_UART_TX   16
+#  define PIN_ESP_UART_RX   -1
+#  define ESP_UART_BAUD     115200
 #endif
 
 // --- Фонарик (вкл/выкл) ---

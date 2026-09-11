@@ -118,3 +118,111 @@ class MotorPwmDir : public MotorChannel {
   bool invert_;
   float power_;
 };
+
+// --- Arduino + L298N через UART (MOTOR_DRIVER_TYPE = 3) ---
+// ESP32 не может дать нужный вольтаж на L298N напрямую, поэтому моторами
+// рулит Arduino (см. firmware/arduino_l298n/motor_controller.ino), а ESP32
+// шлёт ему по UART текстовые команды:
+//   F/B/L/R/S  — вперёд/назад/поворот/стоп (оба мотора)
+//   1..4       — одиночный мотор вперёд/назад
+//   V<0..255>  — скорость
+//
+// Ровер не знает про UART: он зовёт setPower(-1..1) на каждый мотор, а общий
+// мост переводит пару (левая, правая) в одну текстовую команду. Логика
+// остальных узлов и телеметрия не меняются.
+class ArduinoBridge {
+ public:
+  ArduinoBridge() = default;
+
+  // Идемпотентная инициализация: вызывается из обоих моторов при старте.
+  void begin() {
+    if (txInit_) return;
+    txInit_ = true;
+    Serial1.begin(ESP_UART_BAUD, SERIAL_8N1, PIN_ESP_UART_RX, PIN_ESP_UART_TX);
+  }
+
+  // Обновить мощность одной стороны (-1..1) и согласовать Arduino.
+  void setSide(bool isLeft, float p) {
+    begin();
+    if (isLeft) left_ = p; else right_ = p;
+    sync();
+  }
+
+  float power(bool isLeft) const { return isLeft ? left_ : right_; }
+
+ private:
+  void send(const char* s) {
+    if (strcmp(lastCmd_, s) == 0) return;  // дедуп одинаковых команд
+    strncpy(lastCmd_, s, sizeof(lastCmd_) - 1);
+    lastCmd_[sizeof(lastCmd_) - 1] = '\0';
+    Serial.printf("[uart>] %s\n", s);
+    Serial1.print(s);
+    Serial1.print('\n');
+    Serial1.flush();
+  }
+
+  void sync() {
+    const float eps = 0.02f;
+    const float lm = fabs(left_);
+    const float rm = fabs(right_);
+
+    // Оба стоят -> одна S (и сбрасываем скорость, чтобы потом всё прислать заново)
+    if (lm < eps && rm < eps) {
+      sentSpeed_ = -1;
+      send("S");
+      return;
+    }
+
+    // Общая скорость = максимум из двух (у Arduino глобальный speedPWM)
+    const int sp = constrain((int)(max(lm, rm) * 255.0f), 0, 255);
+    if (sp != sentSpeed_) {
+      char buf[12];
+      snprintf(buf, sizeof(buf), "V%d", sp);
+      send(buf);
+      sentSpeed_ = sp;
+    }
+
+    const bool lF = left_ >= 0;    // левый вперёд
+    const bool rF = right_ >= 0;   // правый вперёд
+
+    if (lm > eps && rm > eps) {
+      if (lF && rF)                    send("F");
+      else if (!lF && !rF)             send("B");
+      else if (!lF)                    send("L");  // левый назад, правый вперёд
+      else                             send("R");  // левый вперёд, правый назад
+    } else if (lm > eps) {
+      send(lF ? "1" : "2");            // только левый
+    } else {
+      send(rF ? "3" : "4");            // только правый
+    }
+  }
+
+  float left_ = 0.0f, right_ = 0.0f;
+  char lastCmd_[8] = { 0 };
+  int sentSpeed_ = -1;
+  bool txInit_ = false;
+};
+
+// Драйвер-обёртка над ArduinoBridge, реализует общий интерфейс MotorChannel.
+class MotorArduinoUart : public MotorChannel {
+ public:
+  MotorArduinoUart(ArduinoBridge& bridge, bool isLeft)
+      : bridge_(bridge), isLeft_(isLeft), power_(0) {
+    bridge_.begin();
+  }
+
+  void setPower(float p) override {
+    p = constrain(p, -1.0f, 1.0f);
+    power_ = p;
+    bridge_.setSide(isLeft_, p);
+  }
+
+  void stop() override { setPower(0); }
+
+  float power() const override { return power_; }
+
+ private:
+  ArduinoBridge& bridge_;
+  bool isLeft_;
+  float power_;
+};

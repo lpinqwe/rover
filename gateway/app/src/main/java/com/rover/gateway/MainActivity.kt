@@ -259,24 +259,27 @@ class MainActivity : AppCompatActivity() {
      */
     private fun startWatchdog() {
         val t = Thread {
+            // Снимаем стек именно с main-потока (не с вачдог-потока!).
+            val mainThread = Looper.getMainLooper().thread
             while (!watchdogStop && !isDestroyed) {
-                Thread.sleep(1500)
-                handler.post { mainTick.set(System.currentTimeMillis()) }
-                Thread.sleep(4000)
+                Thread.sleep(3000)
+                val stamp = System.currentTimeMillis()
+                handler.post { mainTick.set(stamp) }
+                // Небольшое окно: если main обработал tick сразу — stuck будет ~500мс.
+                // Старый код спал 4000мс ПОСЛЕ post и всегда получал фантомные 4000мс.
+                Thread.sleep(500)
                 val stuck = System.currentTimeMillis() - mainTick.get()
-                if (stuck > 3500) {
-                    val traces = Thread.getAllStackTraces()
-                    val sb = StringBuilder()
-                    for ((name, stack) in traces) {
-                        sb.append("--- $name ---\n")
-                        stack.take(12).forEach { sb.append("    $it\n") }
-                    }
-                    GatewayService.appendLog("SYS", "WATCHDOG: главный поток занят $stuck мс\n$sb")
+                if (stuck > 1200) {
+                    // Только один поток, без getAllStackTraces: он паркует ВСЕ потоки
+                    // и сам генерит «зависание» на следующем цикле.
+                    val stack = mainThread.stackTrace.take(15)
+                    val sb = StringBuilder("WATCHDOG: главный поток занят $stuck мс\n")
+                    stack.forEach { sb.append("    $it\n") }
+                    GatewayService.appendLog("SYS", sb.toString())
                     val now = System.currentTimeMillis()
                     if (now - lastWdReport > 60_000) { // не флудить ТГ повторами
                         lastWdReport = now
-                        val main = traces[Thread.currentThread()] ?: emptyArray()
-                        val top = main.take(15).joinToString(" | ").take(400)
+                        val top = stack.joinToString(" | ").take(400)
                         TgNotify.report(prefs, "[Rover] Main thread stuck: ${stuck}ms. $top")
                     }
                 }
@@ -391,15 +394,21 @@ class MainActivity : AppCompatActivity() {
             }
 
             val buf = GatewayService.logBuffer
-            if (buf.size > logOffset) {
-                val fmt = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
-                val sb = StringBuilder()
-                for (i in logOffset until buf.size) {
-                    val ts = fmt.format(Date(buf[i].first))
-                    sb.appendLine("$ts  ${buf[i].second}")
+            val newLogs: String? = synchronized(buf) {
+                if (buf.size <= logOffset) {
+                    null
+                } else {
+                    val fmt = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
+                    val sb = StringBuilder()
+                    for (i in logOffset until buf.size) {
+                        sb.appendLine("${fmt.format(Date(buf[i].first))}  ${buf[i].second}")
+                    }
+                    logOffset = buf.size
+                    sb.toString()
                 }
-                logOffset = buf.size
-                val lines = (tvLog.text.toString() + "\n" + sb).split("\n")
+            }
+            if (newLogs != null) {
+                val lines = (tvLog.text.toString() + "\n" + newLogs).split("\n")
                 if (lines.size > 500) {
                     tvLog.text = lines.takeLast(500).joinToString("\n")
                 } else {
