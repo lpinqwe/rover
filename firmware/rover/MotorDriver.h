@@ -24,6 +24,15 @@
   #define LEDC_SET_POWER(pin, ch, d) ledcWrite(ch, (d))
 #endif
 
+// Драйвер Arduino-UART (type 3) может компилироваться и при других типах
+// сконфигурированных моторов — держим дефолты, если config.h не задал.
+#ifndef UART_CMD_REPEATS
+  #define UART_CMD_REPEATS 3
+#endif
+#ifndef UART_CMD_GAP_MS
+  #define UART_CMD_GAP_MS  15
+#endif
+
 class MotorChannel {
  public:
   virtual ~MotorChannel() {}
@@ -159,9 +168,14 @@ class ArduinoBridge {
     strncpy(lastCmd_, s, sizeof(lastCmd_) - 1);
     lastCmd_[sizeof(lastCmd_) - 1] = '\0';
     Serial.printf("[uart>] %s\n", s);
-    Serial1.print(s);
-    Serial1.print('\n');
-    Serial1.flush();
+    // Повторяем: Arduino на SoftwareSerial@115200 иногда теряет байты,
+    // повтор даёт шанс дойти хотя бы одной копии (команды идемпотентны).
+    for (int i = 0; i < UART_CMD_REPEATS; i++) {
+      Serial1.print(s);
+      Serial1.print('\n');
+      Serial1.flush();
+      delay(UART_CMD_GAP_MS);
+    }
   }
 
   void sync() {

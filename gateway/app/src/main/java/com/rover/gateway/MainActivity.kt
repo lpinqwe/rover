@@ -67,6 +67,7 @@ class MainActivity : AppCompatActivity() {
 
     private var lightOn = false
     private var joyActive = false
+    private var buttonHold = false
     private var lastJoySend = 0L
     private var lastSpeed = 0
     private var lastSteer = 0
@@ -183,6 +184,52 @@ class MainActivity : AppCompatActivity() {
         controlPanel.addView(tvLive)
         controlPanel.addView(label("Тяни ручку: вверх = вперёд, вбок = поворот"))
         controlPanel.addView(joyPad)
+
+        // Панель направлений: дискретные кнопки (держать для движения).
+        // Надёжнее джойстика: команда уходит только при смене направления,
+        // плюс повторяется в pollTabs, пока кнопка зажата.
+        controlPanel.addView(TextView(this).apply {
+            text = "Кнопки направления (удерживай)"
+            textSize = 12f
+            setPadding(0, 6 * dp, 0, 0)
+        })
+        val padH = 54 * dp
+        fun dirBtn(text: String, speed: Int, steer: Int) = Button(this).apply {
+            this.text = text
+            textSize = 12f
+            setOnTouchListener { _, e ->
+                when (e.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        buttonHold = true
+                        driveTo(speed, steer)
+                        true
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        buttonHold = false
+                        driveTo(0, 0)
+                        true
+                    }
+                    else -> false
+                }
+            }
+        }
+        fun padRow(vararg btns: Button) = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            for (b in btns) {
+                addView(b, LinearLayout.LayoutParams(0, padH, 1f))
+            }
+        }
+        controlPanel.addView(padRow(
+            dirBtn("В←", 70, -45),
+            dirBtn("Вперёд", 100, 0),
+            dirBtn("В→", 70, 45),
+        ))
+        controlPanel.addView(padRow(
+            dirBtn("Н←", -70, -45),
+            dirBtn("Назад", -100, 0),
+            dirBtn("Н→", -70, 45),
+        ))
+
         controlPanel.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(btnStopBig, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
@@ -370,13 +417,20 @@ class MainActivity : AppCompatActivity() {
         runCatching { startService(intent) }
     }
 
+    /** Единый путь отдачи команды движения (джойстик и кнопки направлений). */
+    private fun driveTo(speed: Int, steer: Int) {
+        lastSpeed = speed
+        lastSteer = steer
+        sendBle(GatewayService.EXTRA_CMD to "drive", GatewayService.EXTRA_SPEED to speed, GatewayService.EXTRA_STEER to steer)
+    }
+
     /* ---------------- Фоновый поллинг (статус/телеметрия/лог) ---------------- */
 
     private val pollTabs = object : Runnable {
         override fun run() {
-            // Keepalive: пока джойстик зажат, повторяем последнюю команду,
+            // Keepalive: пока зажата кнопка или джойстик, повторяем последнюю команду,
             // чтобы ESP не остановил моторы вачдогом (CMD_TIMEOUT_MS).
-            if (joyActive && (lastSpeed != 0 || lastSteer != 0)) {
+            if ((joyActive || buttonHold) && (lastSpeed != 0 || lastSteer != 0)) {
                 sendBle(GatewayService.EXTRA_CMD to "drive", GatewayService.EXTRA_SPEED to lastSpeed, GatewayService.EXTRA_STEER to lastSteer)
             }
 

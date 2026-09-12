@@ -228,7 +228,9 @@ void readESP()
       processCommand(command);
       command = "";
     }
-    else if (c != '\r')
+    // Из-за битых байтов (SoftwareSerial) в команду может попасть мусор —
+    // отбрасываем непечатные, чтобы не портить валидные команды.
+    else if (c != '\r' && isPrintable(c))
     {
       command += c;
     }

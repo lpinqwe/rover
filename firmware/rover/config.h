@@ -56,6 +56,12 @@
 #  define PIN_ESP_UART_TX   16
 #  define PIN_ESP_UART_RX   -1
 #  define ESP_UART_BAUD     115200
+
+// Надёжность: SoftwareSerial на Arduino при 115200 иногда теряет байты,
+// поэтому каждая команда отправляется несколько раз. Чем выше повторы,
+// тем живучее, но теряется отклик (задержка = (REPEATS-1) * GAP_MS).
+#  define UART_CMD_REPEATS  3      // повторов на команду (дедуп одинаковых)
+#  define UART_CMD_GAP_MS   15     // пауза между повторами, мс
 #endif
 
 // --- Фонарик (вкл/выкл) ---
